@@ -1,0 +1,65 @@
+{
+  "schema_version": "1.0",
+  "assignment_id": "a1-content-fidelity-confirm-2026-11-15",
+  "split": "probe",
+  "limits": {
+    "model_input_tokens": 64000,
+    "model_output_tokens": 4096,
+    "case_timeout_sec": 300,
+    "llm_max_attempts": 2,
+    "benchmarks": {
+      "mcpmark": {
+        "max_agent_turns": 80,
+        "max_tool_calls_per_turn": 4,
+        "max_mutating_tool_calls_per_turn": 1
+      }
+    }
+  },
+  "scoring": {
+    "method": "binary_case_count_average",
+    "weights": {
+      "per_case": 1
+    }
+  },
+  "selection_source": {
+    "selection_manifest": "a1_confirm",
+    "note": "A1 live validation: exact-content tasks only."
+  },
+  "benchmarks": {
+    "mcpmark": {
+      "enabled": true,
+      "runner": "mcpmark",
+      "description": "All visible non-public MCPMark tasks.",
+      "cases": [
+        {
+          "case_key": "npp_filesystem_easy_file_context_uppercase",
+          "case_id": "filesystem/file_context/uppercase",
+          "official_task_path": "filesystem/easy/file_context/uppercase",
+          "description": "A1 validation.",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_filesystem_standard_file_context_uppercase",
+          "case_id": "filesystem/standard/file_context/uppercase",
+          "official_task_path": "filesystem/standard/file_context/uppercase",
+          "description": "A1 validation.",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_filesystem_easy_file_context_file_splitting",
+          "case_id": "filesystem/file_context/file_splitting",
+          "official_task_path": "filesystem/easy/file_context/file_splitting",
+          "description": "A1 validation.",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_filesystem_standard_file_context_file_splitting",
+          "case_id": "filesystem/standard/file_context/file_splitting",
+          "official_task_path": "filesystem/standard/file_context/file_splitting",
+          "description": "A1 validation.",
+          "weight": 1
+        }
+      ]
+    }
+  }
+}

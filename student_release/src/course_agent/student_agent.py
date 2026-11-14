@@ -20,11 +20,101 @@ from course_agent.student_tools import (
     get_pending_mcpmark_batch_reads,
     ingest_turn_observation,
     init_case_state,
+    normalize_mcpmark_read_artifact,
     normalize_tools_for_openai,
     record_assistant_final,
     record_assistant_tool_calls,
     sanitize_tool_calls,
+    summarize_mcpmark_mutations,
 )
+
+
+# Transient provider failures that are worth sleeping on and retrying.
+_TRANSIENT_EXC_TYPE_TOKENS = (
+    "ratelimit",
+    "rate_limit",
+    "timeout",
+    "timedout",
+    "apiconnection",
+    "apistatus",
+    "apierror",
+    "apitimeout",
+    "internalservererror",
+    "serviceunavailable",
+    "badgateway",
+    "connectionerror",
+    "readtimeout",
+    "connecttimeout",
+)
+_TRANSIENT_EXC_TEXT_TOKENS = (
+    "rate limit",
+    "rate_limit",
+    "too many requests",
+    "timed out",
+    "timeout",
+    "temporarily unavailable",
+    "overloaded",
+    "service unavailable",
+    "bad gateway",
+    "internal server error",
+    "connection reset",
+    "connection aborted",
+    "429",
+    "502",
+    "503",
+    "504",
+)
+_TRANSIENT_STATUS_CODES = frozenset({408, 409, 425, 429, 500, 502, 503, 504})
+# Hard local caps: retrying can never help, so the case must end (or finish) instead.
+_HARD_STOP_TEXT_TOKENS = (
+    "budget",
+    "max_model_calls",
+    "call limit exceeded",
+    "input exceeds limit",
+)
+
+
+def _iter_exception_chain(exc: BaseException, limit: int = 8) -> list[BaseException]:
+    """Return the ``__cause__``/``__context__`` chain (deduped, capped in length)."""
+    nodes: list[BaseException] = []
+    node: BaseException | None = exc
+    seen: set[int] = set()
+    for _ in range(limit):
+        if node is None or id(node) in seen:
+            break
+        seen.add(id(node))
+        nodes.append(node)
+        node = node.__cause__ or node.__context__
+    return nodes
+
+
+def _classify_llm_error(exc: BaseException) -> str:
+    """Classify a ``CourseLLMClient`` failure as ``"hard"``, ``"transient"`` or ``"unknown"``.
+
+    ``CourseLLMClient`` retries internally and then raises a *generic*
+    ``RuntimeError("LLM chat failed after N attempt(s)")`` chained to the real provider
+    error, so the wrapper's own name/message are useless on their own; we must inspect
+    the whole cause chain. Genuine provider errors are matched by exception type and/or
+    ``status_code``; hard local caps are matched by their distinctive message text.
+    """
+    text_parts: list[str] = []
+    transient = False
+    for node in _iter_exception_chain(exc):
+        type_low = type(node).__name__.lower()
+        text_parts.append(type(node).__name__)
+        text_parts.append(str(node))
+        if not transient and any(tok in type_low for tok in _TRANSIENT_EXC_TYPE_TOKENS):
+            transient = True
+        if not transient:
+            status = getattr(node, "status_code", None)
+            if isinstance(status, int) and status in _TRANSIENT_STATUS_CODES:
+                transient = True
+    text = " ".join(text_parts).lower()
+    if any(tok in text for tok in _HARD_STOP_TEXT_TOKENS):
+        return "hard"
+    if not transient and any(tok in text for tok in _TRANSIENT_EXC_TEXT_TOKENS):
+        transient = True
+    return "transient" if transient else "unknown"
 
 
 class StudentAgent:
@@ -270,6 +360,13 @@ class StudentAgent:
         content: str,
         calls: list[SanitizedToolCall],
     ) -> AgentResponse:
+        # Deterministic content-fidelity fix: shed the MCP read-display artifact newline that models
+        # copy into filesystem writes (breaks exact-match verifiers, e.g. `uppercase`). See
+        # normalize_mcpmark_read_artifact. mcpmark-only; other benchmarks are untouched.
+        if request.benchmark == "mcpmark":
+            obs_results = (request.observation or {}).get("tool_results")
+            if isinstance(obs_results, list):
+                normalize_mcpmark_read_artifact(calls, obs_results)
         record_assistant_tool_calls(state, content, calls)
         if len(calls) == 1:
             only = calls[0]
@@ -287,7 +384,15 @@ class StudentAgent:
         tool_choice: str,
         limits: dict[str, Any],
     ) -> LLMResult:
-        """Call self.llm_client.chat with sleep backoff on transient RateLimit (429) or 5xx errors."""
+        """Call self.llm_client.chat with sleep backoff on transient RateLimit (429) or 5xx errors.
+
+        NOTE: ``CourseLLMClient`` retries internally and then raises a *generic*
+        ``RuntimeError("LLM chat failed after N attempt(s)")`` chained (via
+        ``raise ... from last_exc``) to the real provider error (e.g.
+        ``RateLimitError``). Inspecting only the wrapper's name/message therefore
+        misses every rate-limit/timeout and makes the agent spin without backoff.
+        We must walk the ``__cause__``/``__context__`` chain to classify the fault.
+        """
         last_exc: Exception | None = None
         for delay_sec in (0.0, 3.5, 7.5):
             if delay_sec > 0.0:
@@ -301,30 +406,13 @@ class StudentAgent:
                 )
             except Exception as exc:
                 last_exc = exc
-                err_name = type(exc).__name__.lower()
-                err_text = str(exc).lower()
-                # Never sleep/retry if we hit a local CourseLLMClient budget/token cap
-                if "budget" in err_text or "max_model_calls" in err_text or "exceeded" in err_name:
+                kind = _classify_llm_error(exc)
+                # Hard local caps (per-case model-call budget / input-token limit) must
+                # never be retried: they can only be fixed by ending/finishing the turn.
+                if kind == "hard":
                     raise
-                if any(
-                    tok in err_name or tok in err_text
-                    for tok in (
-                        "ratelimit",
-                        "rate_limit",
-                        "429",
-                        "500",
-                        "502",
-                        "503",
-                        "504",
-                        "internalservererror",
-                        "serviceunavailable",
-                        "badgateway",
-                        "apiconnection",
-                        "apistatus",
-                        "timeout",
-                        "connection",
-                    )
-                ):
+                # Transient provider failures (rate limit, 5xx, timeout, connection): back off.
+                if kind == "transient":
                     continue
                 raise
         assert last_exc is not None
@@ -449,7 +537,7 @@ class StudentAgent:
                 limits=request.limits,
             )
         except Exception as exc:
-            return self._graceful_fallback_on_llm_error(request, state, str(exc))
+            return self._graceful_fallback_on_llm_error(request, state, exc)
 
         sanitized_calls = sanitize_tool_calls(
             benchmark=request.benchmark,
@@ -743,6 +831,62 @@ class StudentAgent:
                         [SanitizedToolCall(name="list_directory", arguments={"path": str(obs["test_directory"])})],
                     )
 
+        # Failure-recovery guard (MCPMark): the model sometimes returns a content-only final
+        # immediately after an unrecovered FAILED mutation and with no successful changes at all
+        # (e.g. a filesystem "Parent directory does not exist", or a postgres "column must appear
+        # in the GROUP BY clause"). Do not end the case at zero successful mutations: re-prompt
+        # ONCE, in-turn, with the concrete error so the model can self-correct. If it still
+        # produces nothing, fall through to the original final below.
+        if (
+            request.benchmark == "mcpmark"
+            and (llm_result.content or "").strip()
+            and not state.get("mcpmark_failure_recovery_fired")
+            and remaining_turns > 1
+            and elapsed_sec < case_timeout_sec - 15.0
+        ):
+            mutations = summarize_mcpmark_mutations(obs.get("tool_results") or [])
+            if mutations["attempts"] > 0 and mutations["successes"] == 0:
+                state["mcpmark_failure_recovery_fired"] = True
+                detail = str(mutations["last_failure_detail"] or "").strip()
+                if len(detail) > 500:
+                    detail = detail[:500]
+                failed_tool = str(mutations["last_failure_tool"] or "")
+                recovery_note = (
+                    (ephemeral_note + "\n\n" if ephemeral_note else "")
+                    + "STOP: Your last mutating tool call"
+                    + (f" (`{failed_tool}`)" if failed_tool else "")
+                    + " FAILED and you have made ZERO successful changes to the environment. "
+                    + (f"Error: {detail}\n" if detail else "")
+                    + "Do NOT finish yet. Diagnose this error and issue a corrected mutating tool call NOW "
+                    "(for a filesystem parent-directory error, create the parent directory first; for SQL, "
+                    "fix the query). Keep internal reasoning under 50 words."
+                )
+                recovery_messages = build_messages_within_budget(
+                    state=state,
+                    openai_tools=openai_tools,
+                    limits=request.limits,
+                    ephemeral_user_note=recovery_note,
+                )
+                try:
+                    recovery_result = self._call_llm_with_backoff(
+                        messages=recovery_messages,
+                        tools=openai_tools if openai_tools else None,
+                        tool_choice="auto",
+                        limits=request.limits,
+                    )
+                    recovery_calls = sanitize_tool_calls(
+                        benchmark=request.benchmark,
+                        raw_calls=recovery_result.tool_calls,
+                        available_tools=request.tools,
+                        limits=request.limits,
+                    )
+                except Exception:
+                    recovery_calls = []
+                if recovery_calls:
+                    return self._emit_sanitized_calls(
+                        request, state, recovery_result.content or "", recovery_calls
+                    )
+
         # No tool calls -> final response
         final_text = (llm_result.content or "").strip() or "Task completed."
         record_assistant_final(state, final_text)
@@ -752,7 +896,7 @@ class StudentAgent:
         self,
         request: AgentRequest,
         state: dict[str, Any],
-        error_msg: str,
+        llm_error: BaseException,
     ) -> AgentResponse:
         """Avoid crashing or prematurely ending a case if an LLM call hits a transient limit."""
         tool_names = set(self._tool_names(request))
@@ -760,15 +904,24 @@ class StudentAgent:
         limits = request.limits or {}
         max_turns = int(limits.get("max_agent_turns") or limits.get("max_model_calls") or 80)
         remaining_turns = max_turns - request.step
+        error_msg = str(llm_error)
+
+        # Hard local caps (call/budget/input limits) can never be recovered by another turn,
+        # so end the case cleanly instead of spinning read-only calls (or apology loops) until
+        # the turn limit. This must run for EVERY benchmark, including tau2.
+        if _classify_llm_error(llm_error) == "hard":
+            fallback = f"Completed with current state ({error_msg})."
+            record_assistant_final(state, fallback)
+            return AgentResponse.final(request.request_id, fallback)
 
         if request.benchmark == "tau2_airline" and "respond_to_user" in tool_names:
             msg = "I apologize, could you please confirm your user ID and reservation details?"
             call = SanitizedToolCall(name="respond_to_user", arguments={"content": msg})
             return self._emit_sanitized_calls(request, state, "", [call])
 
-        # If we have turns remaining and didn't exhaust our per-case model call budget,
-        # emit a harmless read-only tool call rather than terminating the case prematurely!
-        if remaining_turns > 3 and "budget" not in error_msg.lower() and "max_model_calls" not in error_msg.lower():
+        # If we have turns remaining, emit a harmless read-only tool call rather than
+        # terminating the case prematurely. The failed call will be retried next turn.
+        if remaining_turns > 3:
             if request.benchmark == "deepplanning":
                 if not state.get("cached_user_info") and "get_user_info" in tool_names:
                     return self._emit_sanitized_calls(

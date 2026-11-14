@@ -11,20 +11,6 @@ from course_agent.student_tools.data_helpers import (
 )
 
 
-VALID_COUPON_SPECS: list[tuple[str, float, float]] = [
-    ("Cross-store: ¥30 off every ¥300", 30.0, 300.0),
-    ("Cross-store: ¥60 off every ¥500", 60.0, 500.0),
-    ("Cross-store: ¥120 off every ¥900", 120.0, 900.0),
-    ("Cross-store: ¥200 off every ¥1,200", 200.0, 1200.0),
-    ("Cross-store: ¥300 off every ¥1,500", 300.0, 1500.0),
-    ("Same-brand: ¥25 off every ¥200", 25.0, 200.0),
-    ("Same-brand: ¥60 off every ¥400", 60.0, 400.0),
-    ("Same-brand: ¥180 off every ¥1,000", 180.0, 1000.0),
-    ("Same-brand: ¥300 off every ¥1,200", 300.0, 1200.0),
-    ("VIP: ¥200 off every ¥1,000", 200.0, 1000.0),
-]
-
-
 def build_mcpmark_system_prompt(request: AgentRequest) -> str:
     obs = request.observation or {}
     test_dir = obs.get("test_directory")

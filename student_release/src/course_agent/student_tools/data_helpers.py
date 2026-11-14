@@ -7,7 +7,7 @@ import os
 import re
 from typing import Any
 
-from course_agent.student_tools.policy_guard import SanitizedToolCall
+from course_agent.student_tools.policy_guard import SanitizedToolCall, classify_tool
 
 
 def extract_mcp_text(item: dict[str, Any]) -> str:
@@ -23,6 +23,63 @@ def extract_mcp_text(item: dict[str, Any]) -> str:
         if isinstance(sc, dict) and isinstance(sc.get("content"), str):
             return sc["content"]
     return ""
+
+
+_ERROR_LEAD_RE = re.compile(r"^\s*error\b", re.IGNORECASE)
+
+
+def _mcpmark_item_failed(item: dict[str, Any]) -> tuple[bool, str]:
+    """Decide whether a single tool_result item failed; return ``(failed, detail)``.
+
+    A result is a failure when it was skipped without executing, when ``ok`` is False,
+    when the MCP envelope reports ``isError`` True, or when its text begins with an
+    ``Error`` token. The last rule matters for postgres, which reports SQL errors as
+    ``ok=true`` with ``content[0].text`` starting with ``Error:`` (so an ``ok`` check alone
+    would count a broken query as a success).
+    """
+    if item.get("skipped"):
+        return True, "the call was skipped and never executed"
+    if item.get("ok") is False:
+        return True, extract_mcp_text(item) or "the tool returned ok=false"
+    res = item.get("result")
+    if isinstance(res, dict) and res.get("isError") is True:
+        return True, extract_mcp_text(item) or "the tool reported isError=true"
+    text = extract_mcp_text(item)
+    if _ERROR_LEAD_RE.match(text):
+        return True, text
+    return False, ""
+
+
+def summarize_mcpmark_mutations(tool_results: list[dict[str, Any]]) -> dict[str, Any]:
+    """Summarize mutating tool calls in a tool-result list for the failure-recovery guard.
+
+    Returns ``{attempts, successes, last_failure_tool, last_failure_detail}``. Only tools the
+    policy guard classifies as ``mutating`` for mcpmark are counted; a call is a *success*
+    only if it did not fail under :func:`_mcpmark_item_failed`.
+    """
+    attempts = 0
+    successes = 0
+    last_tool = ""
+    last_detail = ""
+    for item in tool_results or []:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("tool_name") or "")
+        if not name or classify_tool("mcpmark", name) != "mutating":
+            continue
+        attempts += 1
+        failed, detail = _mcpmark_item_failed(item)
+        if failed:
+            last_tool = name
+            last_detail = detail
+        else:
+            successes += 1
+    return {
+        "attempts": attempts,
+        "successes": successes,
+        "last_failure_tool": last_tool,
+        "last_failure_detail": last_detail,
+    }
 
 
 def get_written_files_from_tool_results(tool_results: list[dict[str, Any]]) -> dict[str, str]:
@@ -69,6 +126,59 @@ def parse_read_files_from_tool_results(tool_results: list[dict[str, Any]]) -> di
                 if path_part:
                     files_by_path[path_part] = content_part
     return files_by_path
+
+
+def normalize_mcpmark_read_artifact(
+    calls: list[SanitizedToolCall],
+    tool_results: list[dict[str, Any]],
+) -> int:
+    """Strip the MCP read-display artifact newline from filesystem write calls, in place.
+
+    ``read_multiple_files`` formats each entry as ``${path}:\\n${content}\\n`` where the trailing
+    ``\\n`` is a DISPLAY artifact, not part of the file. Models copy it verbatim, producing files
+    one byte too long, which fails exact-match verifiers (e.g. the ``uppercase`` tasks). When a
+    written content equals a previously-read file's exact content plus exactly one trailing ``\\n``
+    (case-insensitively, to also cover case-transform tasks), drop that artifact byte.
+
+    Returns the number of write arguments that were corrected.
+    """
+    read_files = parse_read_files_from_tool_results(tool_results)
+    if not read_files:
+        return 0
+    known: set[str] = set()
+    for content in read_files.values():
+        if content:
+            known.add(content)
+            known.add(content.lower())
+
+    def _fix(text: Any) -> tuple[Any, bool]:
+        if (
+            isinstance(text, str)
+            and text.endswith("\n")
+            and len(text) > 1
+            and (text[:-1] in known or text[:-1].lower() in known)
+        ):
+            return text[:-1], True
+        return text, False
+
+    corrected = 0
+    for call in calls:
+        if call.name == "write_file":
+            if "content" in call.arguments:
+                fixed, changed = _fix(call.arguments.get("content"))
+                if changed:
+                    call.arguments["content"] = fixed
+                    corrected += 1
+        elif call.name in ("write_multiple_files", "write_files"):
+            files = call.arguments.get("files")
+            if isinstance(files, list):
+                for entry in files:
+                    if isinstance(entry, dict) and "content" in entry:
+                        fixed, changed = _fix(entry.get("content"))
+                        if changed:
+                            entry["content"] = fixed
+                            corrected += 1
+    return corrected
 
 
 def _longest_common_substring_30_plus(file_content: str, large_content: str) -> tuple[str, int] | None:

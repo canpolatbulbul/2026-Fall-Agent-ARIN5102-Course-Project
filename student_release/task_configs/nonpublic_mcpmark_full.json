@@ -1,0 +1,401 @@
+{
+  "schema_version": "1.0",
+  "assignment_id": "course-agent-project-2026-nonpublic-mcpmark",
+  "split": "probe",
+  "limits": {
+    "model_input_tokens": 64000,
+    "model_output_tokens": 4096,
+    "case_timeout_sec": 300,
+    "llm_max_attempts": 2,
+    "benchmarks": {
+      "mcpmark": {
+        "max_agent_turns": 80,
+        "max_tool_calls_per_turn": 4,
+        "max_mutating_tool_calls_per_turn": 1
+      }
+    }
+  },
+  "scoring": {
+    "method": "binary_case_count_average",
+    "weights": {
+      "per_case": 1
+    }
+  },
+  "selection_source": {
+    "selection_manifest": "nonpublic_mcpmark_full",
+    "note": "All visible non-public MCPMark filesystem+postgres tasks. Local measurement only."
+  },
+  "benchmarks": {
+    "mcpmark": {
+      "enabled": true,
+      "runner": "mcpmark",
+      "description": "All visible non-public MCPMark tasks.",
+      "cases": [
+        {
+          "case_key": "npp_filesystem_easy_file_context_file_splitting",
+          "case_id": "filesystem/file_context/file_splitting",
+          "official_task_path": "filesystem/easy/file_context/file_splitting",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_filesystem_easy_file_context_uppercase",
+          "case_id": "filesystem/file_context/uppercase",
+          "official_task_path": "filesystem/easy/file_context/uppercase",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_filesystem_easy_file_property_largest_rename",
+          "case_id": "filesystem/file_property/largest_rename",
+          "official_task_path": "filesystem/easy/file_property/largest_rename",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_filesystem_easy_file_property_txt_merging",
+          "case_id": "filesystem/file_property/txt_merging",
+          "official_task_path": "filesystem/easy/file_property/txt_merging",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_filesystem_easy_legal_document_file_reorganize",
+          "case_id": "filesystem/legal_document/file_reorganize",
+          "official_task_path": "filesystem/easy/legal_document/file_reorganize",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_filesystem_easy_papers_papers_counting",
+          "case_id": "filesystem/papers/papers_counting",
+          "official_task_path": "filesystem/easy/papers/papers_counting",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_filesystem_easy_student_database_recommender_name",
+          "case_id": "filesystem/student_database/recommender_name",
+          "official_task_path": "filesystem/easy/student_database/recommender_name",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_filesystem_standard_desktop_project_management",
+          "case_id": "filesystem/desktop/project_management",
+          "official_task_path": "filesystem/standard/desktop/project_management",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_filesystem_standard_desktop_timeline_extraction",
+          "case_id": "filesystem/desktop/timeline_extraction",
+          "official_task_path": "filesystem/standard/desktop/timeline_extraction",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_filesystem_standard_desktop_template_budget_computation",
+          "case_id": "filesystem/desktop_template/budget_computation",
+          "official_task_path": "filesystem/standard/desktop_template/budget_computation",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_filesystem_standard_desktop_template_file_arrangement",
+          "case_id": "filesystem/desktop_template/file_arrangement",
+          "official_task_path": "filesystem/standard/desktop_template/file_arrangement",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_filesystem_standard_file_context_duplicates_searching",
+          "case_id": "filesystem/file_context/duplicates_searching",
+          "official_task_path": "filesystem/standard/file_context/duplicates_searching",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_filesystem_standard_file_context_file_merging",
+          "case_id": "filesystem/file_context/file_merging",
+          "official_task_path": "filesystem/standard/file_context/file_merging",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_filesystem_standard_file_context_file_splitting",
+          "case_id": "filesystem/file_context/file_splitting",
+          "official_task_path": "filesystem/standard/file_context/file_splitting",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_filesystem_standard_file_context_uppercase",
+          "case_id": "filesystem/file_context/uppercase",
+          "official_task_path": "filesystem/standard/file_context/uppercase",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_filesystem_standard_file_property_time_classification",
+          "case_id": "filesystem/file_property/time_classification",
+          "official_task_path": "filesystem/standard/file_property/time_classification",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_filesystem_standard_folder_structure_structure_mirror",
+          "case_id": "filesystem/folder_structure/structure_mirror",
+          "official_task_path": "filesystem/standard/folder_structure/structure_mirror",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_filesystem_standard_legal_document_dispute_review",
+          "case_id": "filesystem/legal_document/dispute_review",
+          "official_task_path": "filesystem/standard/legal_document/dispute_review",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_filesystem_standard_legal_document_individual_comments",
+          "case_id": "filesystem/legal_document/individual_comments",
+          "official_task_path": "filesystem/standard/legal_document/individual_comments",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_filesystem_standard_legal_document_solution_tracing",
+          "case_id": "filesystem/legal_document/solution_tracing",
+          "official_task_path": "filesystem/standard/legal_document/solution_tracing",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_filesystem_standard_papers_author_folders",
+          "case_id": "filesystem/papers/author_folders",
+          "official_task_path": "filesystem/standard/papers/author_folders",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_filesystem_standard_papers_find_math_paper",
+          "case_id": "filesystem/papers/find_math_paper",
+          "official_task_path": "filesystem/standard/papers/find_math_paper",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_filesystem_standard_papers_organize_legacy_papers",
+          "case_id": "filesystem/papers/organize_legacy_papers",
+          "official_task_path": "filesystem/standard/papers/organize_legacy_papers",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_filesystem_standard_student_database_english_talent",
+          "case_id": "filesystem/student_database/english_talent",
+          "official_task_path": "filesystem/standard/student_database/english_talent",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_filesystem_standard_student_database_gradebased_score",
+          "case_id": "filesystem/student_database/gradebased_score",
+          "official_task_path": "filesystem/standard/student_database/gradebased_score",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_filesystem_standard_threestudio_code_locating",
+          "case_id": "filesystem/threestudio/code_locating",
+          "official_task_path": "filesystem/standard/threestudio/code_locating",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_filesystem_standard_threestudio_output_analysis",
+          "case_id": "filesystem/threestudio/output_analysis",
+          "official_task_path": "filesystem/standard/threestudio/output_analysis",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_filesystem_standard_votenet_dataset_comparison",
+          "case_id": "filesystem/votenet/dataset_comparison",
+          "official_task_path": "filesystem/standard/votenet/dataset_comparison",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_filesystem_standard_votenet_requirements_writing",
+          "case_id": "filesystem/votenet/requirements_writing",
+          "official_task_path": "filesystem/standard/votenet/requirements_writing",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_postgres_easy_chinook_customer_data_migration_basic",
+          "case_id": "postgres/chinook/customer_data_migration_basic",
+          "official_task_path": "postgres/easy/chinook/customer_data_migration_basic",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_postgres_easy_chinook_update_employee_info",
+          "case_id": "postgres/chinook/update_employee_info",
+          "official_task_path": "postgres/easy/chinook/update_employee_info",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_postgres_easy_dvdrental_create_payment_index",
+          "case_id": "postgres/dvdrental/create_payment_index",
+          "official_task_path": "postgres/easy/dvdrental/create_payment_index",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_postgres_easy_employees_department_summary_view",
+          "case_id": "postgres/employees/department_summary_view",
+          "official_task_path": "postgres/easy/employees/department_summary_view",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_postgres_easy_employees_employee_gender_statistics",
+          "case_id": "postgres/employees/employee_gender_statistics",
+          "official_task_path": "postgres/easy/employees/employee_gender_statistics",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_postgres_easy_employees_employee_projects_basic",
+          "case_id": "postgres/employees/employee_projects_basic",
+          "official_task_path": "postgres/easy/employees/employee_projects_basic",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_postgres_easy_employees_hiring_year_summary",
+          "case_id": "postgres/employees/hiring_year_summary",
+          "official_task_path": "postgres/easy/employees/hiring_year_summary",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_postgres_easy_lego_basic_security_setup",
+          "case_id": "postgres/lego/basic_security_setup",
+          "official_task_path": "postgres/easy/lego/basic_security_setup",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_postgres_easy_lego_fix_data_inconsistencies",
+          "case_id": "postgres/lego/fix_data_inconsistencies",
+          "official_task_path": "postgres/easy/lego/fix_data_inconsistencies",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_postgres_easy_sports_create_performance_indexes",
+          "case_id": "postgres/sports/create_performance_indexes",
+          "official_task_path": "postgres/easy/sports/create_performance_indexes",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_postgres_standard_chinook_sales_and_music_charts",
+          "case_id": "postgres/chinook/sales_and_music_charts",
+          "official_task_path": "postgres/standard/chinook/sales_and_music_charts",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_postgres_standard_dvdrental_customer_analytics_optimization",
+          "case_id": "postgres/dvdrental/customer_analytics_optimization",
+          "official_task_path": "postgres/standard/dvdrental/customer_analytics_optimization",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_postgres_standard_dvdrental_film_inventory_management",
+          "case_id": "postgres/dvdrental/film_inventory_management",
+          "official_task_path": "postgres/standard/dvdrental/film_inventory_management",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_postgres_standard_employees_employee_demographics_report",
+          "case_id": "postgres/employees/employee_demographics_report",
+          "official_task_path": "postgres/standard/employees/employee_demographics_report",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_postgres_standard_employees_employee_performance_analysis",
+          "case_id": "postgres/employees/employee_performance_analysis",
+          "official_task_path": "postgres/standard/employees/employee_performance_analysis",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_postgres_standard_employees_employee_retention_analysis",
+          "case_id": "postgres/employees/employee_retention_analysis",
+          "official_task_path": "postgres/standard/employees/employee_retention_analysis",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_postgres_standard_lego_consistency_enforcement",
+          "case_id": "postgres/lego/consistency_enforcement",
+          "official_task_path": "postgres/standard/lego/consistency_enforcement",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_postgres_standard_lego_database_security_policies",
+          "case_id": "postgres/lego/database_security_policies",
+          "official_task_path": "postgres/standard/lego/database_security_policies",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_postgres_standard_security_rls_business_access",
+          "case_id": "postgres/security/rls_business_access",
+          "official_task_path": "postgres/standard/security/rls_business_access",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_postgres_standard_security_user_permission_audit",
+          "case_id": "postgres/security/user_permission_audit",
+          "official_task_path": "postgres/standard/security/user_permission_audit",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_postgres_standard_sports_baseball_player_analysis",
+          "case_id": "postgres/sports/baseball_player_analysis",
+          "official_task_path": "postgres/standard/sports/baseball_player_analysis",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_postgres_standard_sports_participant_report_optimization",
+          "case_id": "postgres/sports/participant_report_optimization",
+          "official_task_path": "postgres/standard/sports/participant_report_optimization",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        },
+        {
+          "case_key": "npp_postgres_standard_vectors_dba_vector_analysis",
+          "case_id": "postgres/vectors/dba_vector_analysis",
+          "official_task_path": "postgres/standard/vectors/dba_vector_analysis",
+          "description": "Non-public MCPMark pool task (local measurement only).",
+          "weight": 1
+        }
+      ]
+    }
+  }
+}

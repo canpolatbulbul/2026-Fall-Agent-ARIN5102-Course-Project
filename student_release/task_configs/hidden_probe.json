@@ -1,0 +1,79 @@
+{
+  "schema_version": "1.0",
+  "assignment_id": "course-agent-project-2026-hidden-probe",
+  "split": "probe",
+  "limits": {
+    "model_input_tokens": 64000,
+    "model_output_tokens": 4096,
+    "case_timeout_sec": 300,
+    "llm_max_attempts": 2,
+    "benchmarks": {
+      "mcpmark": {
+        "max_agent_turns": 80,
+        "max_tool_calls_per_turn": 4,
+        "max_mutating_tool_calls_per_turn": 1
+      },
+      "tau2_airline": {
+        "max_agent_turns": 100,
+        "max_environment_steps": 200,
+        "max_tool_calls_per_turn": 3,
+        "max_mutating_tool_calls_per_turn": 1
+      },
+      "deepplanning": {
+        "max_model_calls": 100,
+        "max_tool_calls_per_turn": 5,
+        "max_mutating_tool_calls_per_turn": 3
+      }
+    }
+  },
+  "scoring": {
+    "method": "binary_case_count_average",
+    "weights": {"per_case": 1}
+  },
+  "selection_source": {
+    "selection_manifest": "hidden_probe_manual",
+    "selection_date": "2026-11-15",
+    "note": "Non-public tasks sampled from the visible MCPMark/tau2/deepplanning pools for local measurement only. Not a course assignment."
+  },
+  "benchmarks": {
+    "mcpmark": {
+      "enabled": true,
+      "runner": "mcpmark",
+      "description": "MCPMark hidden-pool probe cases.",
+      "cases": [
+        {"case_key": "probe_fs_structure_mirror", "case_id": "filesystem/folder_structure/structure_mirror", "official_task_path": "filesystem/standard/folder_structure/structure_mirror", "description": "Probe", "weight": 1},
+        {"case_key": "probe_fs_time_classification", "case_id": "filesystem/file_property/time_classification", "official_task_path": "filesystem/standard/file_property/time_classification", "description": "Probe", "weight": 1},
+        {"case_key": "probe_fs_budget_computation", "case_id": "filesystem/desktop_template/budget_computation", "official_task_path": "filesystem/standard/desktop_template/budget_computation", "description": "Probe", "weight": 1},
+        {"case_key": "probe_fs_duplicates_searching", "case_id": "filesystem/file_context/duplicates_searching", "official_task_path": "filesystem/standard/file_context/duplicates_searching", "description": "Probe", "weight": 1},
+        {"case_key": "probe_fs_code_locating", "case_id": "filesystem/threestudio/code_locating", "official_task_path": "filesystem/standard/threestudio/code_locating", "description": "Probe", "weight": 1},
+        {"case_key": "probe_fs_dataset_comparison", "case_id": "filesystem/votenet/dataset_comparison", "official_task_path": "filesystem/standard/votenet/dataset_comparison", "description": "Probe", "weight": 1},
+        {"case_key": "probe_pg_employee_performance_analysis", "case_id": "postgres/employees/employee_performance_analysis", "official_task_path": "postgres/standard/employees/employee_performance_analysis", "description": "Probe", "weight": 1},
+        {"case_key": "probe_pg_film_inventory_management", "case_id": "postgres/dvdrental/film_inventory_management", "official_task_path": "postgres/standard/dvdrental/film_inventory_management", "description": "Probe", "weight": 1},
+        {"case_key": "probe_pg_database_security_policies", "case_id": "postgres/lego/database_security_policies", "official_task_path": "postgres/standard/lego/database_security_policies", "description": "Probe", "weight": 1},
+        {"case_key": "probe_pg_baseball_player_analysis", "case_id": "postgres/sports/baseball_player_analysis", "official_task_path": "postgres/standard/sports/baseball_player_analysis", "description": "Probe", "weight": 1}
+      ]
+    },
+    "tau2_airline": {
+      "enabled": true,
+      "runner": "tau2_airline",
+      "description": "tau2 airline hidden-pool probe cases.",
+      "domain": "airline",
+      "cases": [
+        {"case_key": "probe_tau2_3", "case_id": "3", "description": "Probe", "weight": 1},
+        {"case_key": "probe_tau2_13", "case_id": "13", "description": "Probe", "weight": 1},
+        {"case_key": "probe_tau2_27", "case_id": "27", "description": "Probe", "weight": 1}
+      ]
+    },
+    "deepplanning": {
+      "enabled": true,
+      "runner": "deepplanning",
+      "description": "DeepPlanning hidden-pool probe cases.",
+      "domain": "shopping",
+      "cases": [
+        {"case_key": "probe_dp_l1_case_2", "case_id": "shopping/level_1/case_2", "description": "Probe", "weight": 1},
+        {"case_key": "probe_dp_l2_case_2", "case_id": "shopping/level_2/case_2", "description": "Probe", "weight": 1},
+        {"case_key": "probe_dp_l3_case_2", "case_id": "shopping/level_3/case_2", "description": "Probe", "weight": 1}
+      ]
+    }
+  }
+}

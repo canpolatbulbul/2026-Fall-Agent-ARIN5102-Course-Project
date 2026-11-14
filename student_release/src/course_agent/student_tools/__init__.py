@@ -1,6 +1,8 @@
 from course_agent.student_tools.data_helpers import (
     compute_mcpmark_data_helper_note,
     get_pending_mcpmark_batch_reads,
+    normalize_mcpmark_read_artifact,
+    summarize_mcpmark_mutations,
 )
 from course_agent.student_tools.history import (
     build_messages_within_budget,
@@ -42,8 +44,10 @@ __all__ = [
     "get_pending_mcpmark_batch_reads",
     "ingest_turn_observation",
     "init_case_state",
+    "normalize_mcpmark_read_artifact",
     "normalize_tools_for_openai",
     "record_assistant_final",
     "record_assistant_tool_calls",
     "sanitize_tool_calls",
+    "summarize_mcpmark_mutations",
 ]
