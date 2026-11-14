@@ -141,6 +141,21 @@ Per-benchmark limits enforced by the runner:
 - Simplified smoke backend may only expose `submit_plan`.
 - Uses Qwen-Agent checkout with pinned Shopping data from HuggingFace.
 - No Docker/Node/Postgres required.
+- **Post-Release Adapter Update**: `request.observation["domain_policy"]` now provides the level-specific shopping objective for each DeepPlanning level. `StudentAgent.solve_deepplanning()` must include `request.observation["domain_policy"]` alongside `request.observation["query"]` when building LLM messages.
+
+## Post-Release Teaching Team Updates (Important for Coding Agents)
+
+The teaching team issued two official clarifications/updates after the initial repository release. Any coding agent working on this repository must take both into account:
+
+### Update 1: Deterministic Python Helpers Allowed in `student_tools/` (Overrides MCPMark "No Python" Instructions)
+- **What changed**: Students are explicitly permitted to write deterministic Python helper functions under `student_release/src/course_agent/student_tools/` to process data returned by benchmark tools in `request.observation` (such as string/substring matching, counting, arithmetic, aggregation, and constraint checking) rather than forcing the LLM to compute them in-context.
+- **Override of prompt restrictions**: This permission explicitly overrides the "no Python" instructions written inside MCPMark task prompts (specifically tasks involving pattern matching / common substrings, directory structure analysis / file counts & depths, and duplicate-name detection).
+- **Strict boundary**: All reads and writes to the benchmark environment must still go exclusively through the provided benchmark tools (`request.tools`). Python helpers may only inspect and transform tool outputs already returned in `request.observation`, and must never access the filesystem, database, or environment directly.
+
+### Update 2: DeepPlanning `domain_policy` Observation Field & Reference-Cart Evaluation Behavior
+- **Adapter & prompt change**: The course repository's DeepPlanning adapter was updated so that `request.observation["domain_policy"]` contains the explicit objective for the task's level (Level 1, 2, or 3). After pulling the latest upstream course repository changes, `StudentAgent.solve_deepplanning()` (and its prompt builders) must include `request.observation["domain_policy"]` alongside `request.observation["query"]` when constructing the LLM messages.
+- **Evaluator tie-breaking caveat**: The official DeepPlanning evaluator grades the final cart (`cart.json`) by comparing it against a single fixed reference cart. In some cases (such as public Level 2 Case 43), multiple distinct product combinations can satisfy 100% of the shopping constraints and tie at the exact same lowest total price, yet only the fixed reference cart receives `1.0`.
+- **Debugging & grading implication**: When debugging DeepPlanning trajectories, do not blindly assume a `0.0` score means the agent violated a constraint—inspect the trajectory's tool results and final cart against the user requirements and `domain_policy` objective to distinguish true constraint errors from reference-cart ties. The teaching team will filter out hidden test cases where the official evaluator rejects an equally optimal tied cart before final grading.
 
 ## Scoring
 
