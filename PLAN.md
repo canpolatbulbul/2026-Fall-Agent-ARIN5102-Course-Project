@@ -469,6 +469,23 @@ Two official updates were announced by the Teaching Team after the initial relea
    - **Evaluation Note**: The official DeepPlanning evaluator compares `cart.json` against a fixed reference cart. In cases like public Level 2 Case 43 (`dp_level_2_case_43`), two different carts can satisfy all constraints and tie at the lowest total price while only the reference cart receives full credit (`1.0`). When debugging, always verify the trajectory and final cart against the shopping constraints and level objective; the teaching team will screen the private test set to exclude cases where equally optimal tied carts are rejected.
    - **Status**: Completed — pulled upstream commits (`327133f` & `2417803`) from `meizi-l/2026-Fall-Agent-Course-Project` and wired `request.observation.get("domain_policy")` into `build_deepplanning_system_prompt()` and `build_deepplanning_initial_user_message()` in `student_tools/prompts.py` (used by `solve_deepplanning()` in `student_agent.py`).
 
+## Public-40 Regression Check (2026-11-15, official backend, run `20261115T133318Z-05bb50c8`)
+
+- Result: **38/40 (0.95)** — `mcpmark 16/16`, `deepplanning 12/12`, `tau2_airline 10/12`.
+- Cost: 321 LLM calls, ~4.4M total tokens.
+- **Two tau2 failures: task 25 and task 6 — both are nondeterministic LLM-path flips, NOT caused by
+  any code change.** Both scored 1.0 in the earlier 40-run (`20261114T170728Z-a92c9834`, 40/40). No
+  commit since that run touched the tau2 solve path or its prompt (verified via `git log`/`git show`;
+  the only `prompts.py` change removed a dead `VALID_COUPON_SPECS` constant).
+  - `tau2/25`: agent booked the correct flights/payments but used the **wrong passenger DOB**
+    (1968-04-25; golden 1986-03-14) → `db_match=false` → 0.0. Identity-disambiguation error.
+  - `tau2/6`: policy violation — the user pushed to add insurance and the agent **booked a new
+    reservation with insurance=yes** instead of refusing; golden behavior is read-only (no mutation)
+    → `db_match=false` → 0.0. Caving-to-persistence error.
+- Implication: MCPMark is covered deterministically (solvers, 0 LLM calls); tau2 and deepplanning
+  remain fully LLM-driven and therefore carry run-to-run variance. This is a *variance* risk, not a
+  systematic weakness — the deterministic MCPMark work cannot influence these two.
+
 ## Agent Handoff Notes
 
 1. Read `AGENTS.md` first — it covers project structure, all commands, and gotchas.
