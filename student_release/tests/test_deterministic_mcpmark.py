@@ -1,4 +1,5 @@
-import pytest
+import os
+from pathlib import Path
 
 from course_agent.protocol import AgentRequest
 from course_agent.runtime import LLMResult
@@ -6,6 +7,9 @@ from course_agent.student_agent import StudentAgent
 from course_agent.student_tools import SanitizedToolCall
 from course_agent.student_tools.deterministic_mcpmark import (
     _emitted_call_failed_before,
+    _file_splitting_solver,
+    _has_read_basename,
+    _split_three,
     plan_deterministic_mcpmark,
 )
 
@@ -162,3 +166,172 @@ def test_unrecognized_mcpmark_request_uses_llm_final(monkeypatch):
     assert response.kind == "final"
     assert response.content == "All done via LLM."
     assert len(llm.calls) == 1
+
+
+# ---------------------------------------------------------------------------
+# Task 2: deterministic file_splitting solver
+# ---------------------------------------------------------------------------
+
+TASKS = Path(__file__).resolve().parents[2] / "third_party/mcpmark/tasks/filesystem"
+
+SPLIT_INSTRUCTION = "You need to split large_file.txt into exactly 3 files with similar character counts."
+LARGE_PATH = "/root/work/large_file.txt"
+SPLIT_DIR = "/root/work/split"
+
+
+def _desc(rel):
+    p = TASKS / rel
+    return p.read_text() if p.exists() else ""
+
+
+def _read_result(*, path=LARGE_PATH, text="abcdefghij"):
+    return {
+        "tool_name": "read_text_file",
+        "ok": True,
+        "result": {"isError": False, "content": [{"text": text}]},
+        "tool_arguments": {"path": path},
+    }
+
+
+def _create_dir_result(*, path=SPLIT_DIR, ok=True):
+    return {
+        "tool_name": "create_directory",
+        "ok": ok,
+        "result": {"isError": False, "content": [{"text": ""}]},
+        "tool_arguments": {"path": path},
+    }
+
+
+def _write_result(*, path, content, ok=True):
+    return {
+        "tool_name": "write_file",
+        "ok": ok,
+        "result": {"isError": False, "content": [{"text": ""}]},
+        "tool_arguments": {"path": path, "content": content},
+    }
+
+
+def test_split_three_preserves_content_and_balances():
+    s = "abcdefghij"  # 10 chars
+    parts = _split_three(s)
+    assert "".join(parts) == s
+    assert max(map(len, parts)) - min(map(len, parts)) <= 1
+    assert len(parts) == 3
+
+
+def test_recognition_uses_real_descriptions():
+    split_desc = _desc("easy/file_context/file_splitting/description.md")
+    pat_desc = _desc("easy/file_context/pattern_matching/description.md")
+    assert "large_file.txt" in split_desc and "split" in split_desc
+    assert "large_file.txt" in pat_desc and "split" not in pat_desc.lower()
+
+
+def test_has_read_basename_true_for_read_result_by_basename():
+    request = _req(tool_results=[_read_result()])
+    assert _has_read_basename(request, "large_file.txt") is True
+
+
+def test_has_read_basename_false_when_absent():
+    assert _has_read_basename(_req(tool_results=[]), "large_file.txt") is False
+
+
+def test_solver_emits_read_when_file_not_yet_read_and_no_failed_read():
+    req = _req(instruction=SPLIT_INSTRUCTION)
+    d = _file_splitting_solver(req, {})
+    assert d is not None and len(d.calls) == 1 and d.calls[0].name == "read_text_file"
+    assert d.calls[0].arguments == {"path": LARGE_PATH}
+
+
+def test_solver_not_triggered_for_pattern_matching_instruction():
+    pat_desc = _desc("easy/file_context/pattern_matching/description.md")
+    req = _req(instruction=pat_desc or "read large_file.txt and find common substrings")
+    assert _file_splitting_solver(req, {}) is None
+
+
+def test_solver_emits_create_directory_after_read():
+    req = _req(instruction=SPLIT_INSTRUCTION, tool_results=[_read_result()])
+    d = _file_splitting_solver(req, {})
+    assert d is not None and len(d.calls) == 1 and d.calls[0].name == "create_directory"
+    assert d.calls[0].arguments == {"path": SPLIT_DIR}
+
+
+def test_solver_emits_first_write_when_missing():
+    parts = _split_three("abcdefghij")
+    req = _req(instruction=SPLIT_INSTRUCTION, tool_results=[_read_result(), _create_dir_result()])
+    d = _file_splitting_solver(req, {})
+    assert d is not None and len(d.calls) == 1 and d.calls[0].name == "write_file"
+    assert d.calls[0].arguments == {
+        "path": os.path.join(SPLIT_DIR, "split_01.txt"),
+        "content": parts[0],
+    }
+
+
+def test_solver_reeemits_write_when_recorded_content_differs():
+    parts = _split_three("abcdefghij")
+    wrong = [
+        _write_result(path=os.path.join(SPLIT_DIR, "split_01.txt"), content="WRONG"),
+    ]
+    req = _req(
+        instruction=SPLIT_INSTRUCTION,
+        tool_results=[_read_result(), _create_dir_result()] + wrong,
+    )
+    d = _file_splitting_solver(req, {})
+    assert d is not None and d.calls[0].name == "write_file"
+    assert d.calls[0].arguments == {
+        "path": os.path.join(SPLIT_DIR, "split_01.txt"),
+        "content": parts[0],
+    }
+
+
+def test_solver_proceeds_to_second_write_when_first_matches():
+    parts = _split_three("abcdefghij")
+    done = [_write_result(path=os.path.join(SPLIT_DIR, "split_01.txt"), content=parts[0])]
+    req = _req(
+        instruction=SPLIT_INSTRUCTION,
+        tool_results=[_read_result(), _create_dir_result()] + done,
+    )
+    d = _file_splitting_solver(req, {})
+    assert d is not None and d.calls[0].name == "write_file"
+    assert d.calls[0].arguments == {
+        "path": os.path.join(SPLIT_DIR, "split_02.txt"),
+        "content": parts[1],
+    }
+
+
+def test_solver_is_final_when_all_three_recorded_contents_match():
+    parts = _split_three("abcdefghij")
+    done = [
+        _write_result(path=os.path.join(SPLIT_DIR, f"split_0{n}.txt"), content=parts[n - 1])
+        for n in range(1, 4)
+    ]
+    req = _req(
+        instruction=SPLIT_INSTRUCTION,
+        tool_results=[_read_result(), _create_dir_result()] + done,
+    )
+    d = _file_splitting_solver(req, {})
+    assert d is not None and d.is_final is True and d.calls == []
+
+
+# ---------------------------------------------------------------------------
+# Task 2 extra requirement: end-to-end framework guard veto.
+#
+# When the solver would emit a call identical (name + equal tool_arguments) to
+# one already present in tool_results with a failed result, the framework guard
+# must veto it: plan_deterministic_mcpmark returns None and latches
+# state["det_disabled"] = True. Task 1 deferred this test until a solver existed.
+# ---------------------------------------------------------------------------
+
+
+def test_guard_vetoes_solver_when_emitted_read_already_failed():
+    failed_read = [
+        {
+            "tool_name": "read_text_file",
+            "ok": False,
+            "result": None,
+            "tool_arguments": {"path": LARGE_PATH},
+        }
+    ]
+    req = _req(instruction=SPLIT_INSTRUCTION, tool_results=failed_read)
+    state: dict = {}
+    assert plan_deterministic_mcpmark(req, state) is None
+    assert state["det_disabled"] is True
