@@ -509,6 +509,32 @@ Two official updates were announced by the Teaching Team after the initial relea
   the highest-value candidate if any further work is done; it would need a validating run to confirm
   no regression on the currently-passing cases.
 
+## Non-Public DeepPlanning Measurement (2026-11-15, official backend, run `20261115T142734Z-345dae82`)
+
+- Result: **8/10 (0.80)** — 63 LLM calls / ~1.39M tokens. Far above the course baseline (0.1667);
+  consistent with the public 12/12 and the 3/3 probe. DeepPlanning does not show the public-vs-hidden
+  gap that tau2 does.
+- Failures (both LLM behaviour, no code bug):
+  - `shopping/level_2/case_5` — **runner_error, TimeoutError "case exceeded 300 seconds".** The model
+    repeatedly hit the 4096 completion-token cap (one LLM call used exactly 4096 completion tokens,
+    ~27s each) and exhausted the 300s case budget. Over-reasoning on a heavy level-2 observation.
+  - `shopping/level_2/case_4` — **scored_failure.** 5-item, $3326–3739 query; the agent's cart churned
+    (0→1→2→3 items, then dropped to 2) and finished with only 2 items totalling $2148.99 — far under
+    the required minimum and incomplete. Task-completion error.
+
+## Held-Out-Like Scorecard (all local, 2026-11-15)
+
+| Benchmark | Held-out-like sample | Rate | Course baseline | Verdict |
+|-----------|----------------------|------|-----------------|---------|
+| MCPMark   | 52-case cold census + 4 solvers | 28/52 + 4 | 0.3125 | above baseline |
+| tau2 Airline | 10 non-public (test split) | 5/10 = 0.50 | 0.4167 | above baseline (thin) |
+| DeepPlanning | 10 non-public (levels 1-3) | 8/10 = 0.80 | 0.1667 | well above baseline |
+
+- Projected weighted hidden score (if hidden mirrors the 40-case composition, 16/12/12): roughly
+  `(16*0.54 + 12*0.50 + 12*0.80)/40 ≈ 0.60`, vs the baseline-weighted ~0.30. All three benchmarks
+  are above their anchors; the gap to worry about is tau2's thin margin and its dependence on LLM
+  behaviour we do not control deterministically.
+
 ## Agent Handoff Notes
 
 1. Read `AGENTS.md` first — it covers project structure, all commands, and gotchas.
