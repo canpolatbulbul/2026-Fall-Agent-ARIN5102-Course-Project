@@ -24,8 +24,9 @@ from typing import Any, Callable
 
 from course_agent.protocol import AgentRequest
 from course_agent.student_tools.data_helpers import (
-    extract_mcp_text,
+    extract_mcp_text,  # noqa: F401  (consumed by later solvers)
     get_written_files_from_tool_results,  # noqa: F401  (consumed by later solvers)
+    mcpmark_item_failed,
     parse_read_files_from_tool_results,  # noqa: F401  (consumed by later solvers)
 )
 from course_agent.student_tools.policy_guard import SanitizedToolCall
@@ -69,13 +70,10 @@ def _emitted_call_failed_before(
 ) -> bool:
     """Return True iff ``call`` is identical to an already-failed tool_result.
 
-    Matching is by tool name plus equal ``tool_arguments``. A result is treated
-    as failed iff any of the following holds:
-      - ``ok`` is exactly ``False``,
-      - ``skipped`` is truthy (the call never executed),
-      - ``result.isError`` is exactly ``True``,
-      - the extracted MCP text (leading whitespace stripped, lower-cased)
-        starts with the ``error`` token.
+    Matching is by tool name plus equal ``tool_arguments``. Whether a matched
+    result failed is decided by the shared ``data_helpers.mcpmark_item_failed``
+    predicate (the same one the mutation-recovery summary uses), so the two can
+    never diverge.
     """
     obs = request.observation or {}
     tool_results = obs.get("tool_results")
@@ -88,15 +86,7 @@ def _emitted_call_failed_before(
             continue
         if item.get("tool_arguments") != call.arguments:
             continue
-        if (
-            item.get("ok") is False
-            or item.get("skipped")
-            or (
-                isinstance(item.get("result"), dict)
-                and item["result"].get("isError") is True
-            )
-            or extract_mcp_text(item).lstrip().lower().startswith("error")
-        ):
+        if mcpmark_item_failed(item)[0]:
             return True
     return False
 

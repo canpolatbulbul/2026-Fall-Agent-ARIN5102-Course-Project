@@ -28,8 +28,11 @@ def extract_mcp_text(item: dict[str, Any]) -> str:
 _ERROR_LEAD_RE = re.compile(r"^\s*error\b", re.IGNORECASE)
 
 
-def _mcpmark_item_failed(item: dict[str, Any]) -> tuple[bool, str]:
+def mcpmark_item_failed(item: dict[str, Any]) -> tuple[bool, str]:
     """Decide whether a single tool_result item failed; return ``(failed, detail)``.
+
+    Single source of truth for "this MCPMark tool result failed", shared by the
+    mutation-recovery summary and the deterministic compute-and-emit guard.
 
     A result is a failure when it was skipped without executing, when ``ok`` is False,
     when the MCP envelope reports ``isError`` True, or when its text begins with an
@@ -55,7 +58,7 @@ def summarize_mcpmark_mutations(tool_results: list[dict[str, Any]]) -> dict[str,
 
     Returns ``{attempts, successes, last_failure_tool, last_failure_detail}``. Only tools the
     policy guard classifies as ``mutating`` for mcpmark are counted; a call is a *success*
-    only if it did not fail under :func:`_mcpmark_item_failed`.
+    only if it did not fail under :func:`mcpmark_item_failed`.
     """
     attempts = 0
     successes = 0
@@ -68,7 +71,7 @@ def summarize_mcpmark_mutations(tool_results: list[dict[str, Any]]) -> dict[str,
         if not name or classify_tool("mcpmark", name) != "mutating":
             continue
         attempts += 1
-        failed, detail = _mcpmark_item_failed(item)
+        failed, detail = mcpmark_item_failed(item)
         if failed:
             last_tool = name
             last_detail = detail
