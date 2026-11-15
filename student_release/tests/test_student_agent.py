@@ -484,21 +484,21 @@ def _basic_economy_state(first_user_msg):
     }
 
 
-def test_tau2_prompt_gates_upgrade_on_explicit_consent():
+def test_tau2_prompt_requires_customer_initiated_upgrade():
     from course_agent.student_tools.prompts import build_tau2_system_prompt
 
     prompt = build_tau2_system_prompt(_tau_request([{"name": "respond_to_user"}])).lower()
-    # The gate must be present.
-    assert "explicitly agrees to pay for the upgrade" in prompt
-    assert "combined net cost" in prompt
-    # The consent/budget gate heading must be present.
-    assert "consent + budget gated" in prompt
-    assert "must not take this 2-step path unless both conditions hold" in prompt
-    # The old unconditional "just use the 2-step path" instruction must be gone.
+    # Customer-initiated-only rule must be present.
+    assert "customer-initiated only" in prompt
+    assert "do not solicit" in prompt
+    assert "honour an explicit refusal" in prompt
+    # The old solicitation instruction ("ASK first and get a clear yes") must be gone.
+    assert "ask first and get a clear" not in prompt
+    # And no unconditional "just use the 2-step path" instruction.
     assert "use the 2-step path: **step 1**" not in prompt
 
 
-def test_tau2_note_does_not_unconditionally_push_upgrade():
+def test_tau2_note_does_not_solicit_upgrade():
     from course_agent.student_tools import build_ephemeral_turn_note
 
     req = _tau_request_at_step([{"name": "respond_to_user"}], step=2)
@@ -506,6 +506,9 @@ def test_tau2_note_does_not_unconditionally_push_upgrade():
         req, _basic_economy_state("I need to change my flight to a nonstop please.")
     )
     assert note is not None
-    assert "explicitly agrees to pay for an upgrade" in note.lower()
+    low = note.lower()
+    # The note must instruct the agent NOT to initiate/offer the upgrade.
+    assert "must not initiate or proactively offer" in low
+    assert "customer themselves" in low
     # The old pushy line must be gone.
-    assert "do not steer them to keep current flights" not in note.lower()
+    assert "do not steer them to keep current flights" not in low

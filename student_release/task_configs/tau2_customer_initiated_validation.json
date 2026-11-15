@@ -1,0 +1,49 @@
+{
+  "schema_version": "1.0",
+  "assignment_id": "course-agent-project-2026-tau2-customer-initiated-upgrade-validation",
+  "split": "probe",
+  "limits": {
+    "model_input_tokens": 64000,
+    "model_output_tokens": 4096,
+    "case_timeout_sec": 300,
+    "llm_max_attempts": 2,
+    "benchmarks": {
+      "tau2_airline": {
+        "max_agent_turns": 100,
+        "max_environment_steps": 200,
+        "max_tool_calls_per_turn": 3,
+        "max_mutating_tool_calls_per_turn": 1
+      }
+    }
+  },
+  "scoring": {
+    "method": "binary_case_count_average",
+    "weights": {"per_case": 1},
+    "baseline_anchors": {
+      "tau2_airline": 0.4166666666666667
+    },
+    "baseline_anchors_note": "Reference only: course baseline completion rate for tau2 Airline. Local measurement config, not a course assignment."
+  },
+  "selection_source": {
+    "selection_manifest": "tau2_customer_initiated_upgrade_validation_manual",
+    "selection_date": "2026-11-15",
+    "note": "Isolated validation of the customer-initiated-only basic_economy upgrade rule (R1). Includes public canary 32 (customer volunteers the upgrade; must stay green), passing tasks 13/22/30, the two targets 19/31 (goldens: cancel / no-action), and 35 (previously fixed by the transfer-discipline line). Local measurement only."
+  },
+  "benchmarks": {
+    "tau2_airline": {
+      "enabled": true,
+      "runner": "tau2_airline",
+      "description": "Focused tau2 Airline validation set (customer-initiated-only upgrade rule).",
+      "domain": "airline",
+      "cases": [
+        {"case_key": "tau2_32", "case_id": "32", "description": "Public canary: customer volunteers the upgrade; golden = 2-step upgrade.", "weight": 1},
+        {"case_key": "npp_tau2_13", "case_id": "13", "description": "Non-public: user willing to upgrade if told; golden is a transfer (DB-neutral).", "weight": 1},
+        {"case_key": "npp_tau2_22", "case_id": "22", "description": "Non-public: customer asks to upgrade to economy; golden = flights/passengers/bags.", "weight": 1},
+        {"case_key": "npp_tau2_30", "case_id": "30", "description": "Non-public: modify to nonstop; previously passing.", "weight": 1},
+        {"case_key": "npp_tau2_19", "case_id": "19", "description": "Target: agent must NOT solicit the upgrade; user volunteers cancel; golden = cancel.", "weight": 1},
+        {"case_key": "npp_tau2_31", "case_id": "31", "description": "Target: agent must NOT solicit the upgrade; user refuses upgrade; golden = no action.", "weight": 1},
+        {"case_key": "npp_tau2_35", "case_id": "35", "description": "Previously fixed by transfer-discipline line; must not regress.", "weight": 1}
+      ]
+    }
+  }
+}
