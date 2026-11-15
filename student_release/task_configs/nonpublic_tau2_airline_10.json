@@ -1,0 +1,52 @@
+{
+  "schema_version": "1.0",
+  "assignment_id": "course-agent-project-2026-nonpublic-tau2-airline-10",
+  "split": "probe",
+  "limits": {
+    "model_input_tokens": 64000,
+    "model_output_tokens": 4096,
+    "case_timeout_sec": 300,
+    "llm_max_attempts": 2,
+    "benchmarks": {
+      "tau2_airline": {
+        "max_agent_turns": 100,
+        "max_environment_steps": 200,
+        "max_tool_calls_per_turn": 3,
+        "max_mutating_tool_calls_per_turn": 1
+      }
+    }
+  },
+  "scoring": {
+    "method": "binary_case_count_average",
+    "weights": {"per_case": 1},
+    "baseline_anchors": {
+      "tau2_airline": 0.4166666666666667
+    },
+    "baseline_anchors_note": "Reference only: course baseline completion rate for tau2 Airline. Local measurement config, not a course assignment."
+  },
+  "selection_source": {
+    "selection_manifest": "nonpublic_tau2_airline_10_manual",
+    "selection_date": "2026-11-15",
+    "note": "10 non-public tau2 Airline tasks drawn from the held-out test split (20 tasks), excluding the 12 public cases. Local measurement only. Hidden grading uses the same benchmark/family with different instances."
+  },
+  "benchmarks": {
+    "tau2_airline": {
+      "enabled": true,
+      "runner": "tau2_airline",
+      "description": "Non-public tau2 Airline tasks (hidden-like probe).",
+      "domain": "airline",
+      "cases": [
+        {"case_key": "npp_tau2_13", "case_id": "13", "description": "Non-public tau2 airline task.", "weight": 1},
+        {"case_key": "npp_tau2_16", "case_id": "16", "description": "Non-public tau2 airline task.", "weight": 1},
+        {"case_key": "npp_tau2_19", "case_id": "19", "description": "Non-public tau2 airline task.", "weight": 1},
+        {"case_key": "npp_tau2_22", "case_id": "22", "description": "Non-public tau2 airline task.", "weight": 1},
+        {"case_key": "npp_tau2_24", "case_id": "24", "description": "Non-public tau2 airline task.", "weight": 1},
+        {"case_key": "npp_tau2_26", "case_id": "26", "description": "Non-public tau2 airline task.", "weight": 1},
+        {"case_key": "npp_tau2_29", "case_id": "29", "description": "Non-public tau2 airline task.", "weight": 1},
+        {"case_key": "npp_tau2_30", "case_id": "30", "description": "Non-public tau2 airline task.", "weight": 1},
+        {"case_key": "npp_tau2_31", "case_id": "31", "description": "Non-public tau2 airline task.", "weight": 1},
+        {"case_key": "npp_tau2_35", "case_id": "35", "description": "Non-public tau2 airline task.", "weight": 1}
+      ]
+    }
+  }
+}

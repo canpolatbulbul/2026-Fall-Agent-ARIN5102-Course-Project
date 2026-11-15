@@ -1,0 +1,51 @@
+{
+  "schema_version": "1.0",
+  "assignment_id": "course-agent-project-2026-nonpublic-deepplanning-10",
+  "split": "probe",
+  "limits": {
+    "model_input_tokens": 64000,
+    "model_output_tokens": 4096,
+    "case_timeout_sec": 300,
+    "llm_max_attempts": 2,
+    "benchmarks": {
+      "deepplanning": {
+        "max_model_calls": 100,
+        "max_tool_calls_per_turn": 5,
+        "max_mutating_tool_calls_per_turn": 3
+      }
+    }
+  },
+  "scoring": {
+    "method": "binary_case_count_average",
+    "weights": {"per_case": 1},
+    "baseline_anchors": {
+      "deepplanning": 0.16666666666666666
+    },
+    "baseline_anchors_note": "Reference only: course baseline completion rate for DeepPlanning Shopping. Local measurement config, not a course assignment."
+  },
+  "selection_source": {
+    "selection_manifest": "nonpublic_deepplanning_10_manual",
+    "selection_date": "2026-11-15",
+    "note": "10 non-public DeepPlanning Shopping cases spread across levels 1-3, excluding the 12 public cases and the 3 probe cases. Local measurement only. Hidden grading uses the same benchmark/family with different instances."
+  },
+  "benchmarks": {
+    "deepplanning": {
+      "enabled": true,
+      "runner": "deepplanning",
+      "description": "Non-public DeepPlanning Shopping cases (hidden-like probe).",
+      "domain": "shopping",
+      "cases": [
+        {"case_key": "npp_dp_l1_case_1", "case_id": "shopping/level_1/case_1", "description": "Non-public DeepPlanning task.", "weight": 1},
+        {"case_key": "npp_dp_l1_case_3", "case_id": "shopping/level_1/case_3", "description": "Non-public DeepPlanning task.", "weight": 1},
+        {"case_key": "npp_dp_l1_case_4", "case_id": "shopping/level_1/case_4", "description": "Non-public DeepPlanning task.", "weight": 1},
+        {"case_key": "npp_dp_l1_case_5", "case_id": "shopping/level_1/case_5", "description": "Non-public DeepPlanning task.", "weight": 1},
+        {"case_key": "npp_dp_l2_case_3", "case_id": "shopping/level_2/case_3", "description": "Non-public DeepPlanning task.", "weight": 1},
+        {"case_key": "npp_dp_l2_case_4", "case_id": "shopping/level_2/case_4", "description": "Non-public DeepPlanning task.", "weight": 1},
+        {"case_key": "npp_dp_l2_case_5", "case_id": "shopping/level_2/case_5", "description": "Non-public DeepPlanning task.", "weight": 1},
+        {"case_key": "npp_dp_l3_case_5", "case_id": "shopping/level_3/case_5", "description": "Non-public DeepPlanning task.", "weight": 1},
+        {"case_key": "npp_dp_l3_case_6", "case_id": "shopping/level_3/case_6", "description": "Non-public DeepPlanning task.", "weight": 1},
+        {"case_key": "npp_dp_l3_case_7", "case_id": "shopping/level_3/case_7", "description": "Non-public DeepPlanning task.", "weight": 1}
+      ]
+    }
+  }
+}
