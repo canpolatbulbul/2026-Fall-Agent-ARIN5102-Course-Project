@@ -451,3 +451,61 @@ def test_failure_recovery_guard_does_not_fire_when_time_exhausted():
     assert response.kind == "final"
     assert len(llm.calls) == 1
 
+
+
+# --- tau2 basic_economy upgrade gating (consent + budget) ---------------------
+
+def _tau_request_at_step(tools, step):
+    return AgentRequest.from_dict(
+        {
+            "request_id": "req-note",
+            "context_id": "ctx-note",
+            "benchmark": "tau2_airline",
+            "case_id": "19",
+            "step": step,
+            "text": "I need to change my flight.",
+            "observation": {"message_type": "user", "content": "I need to change my flight."},
+            "tools": tools,
+            "limits": {"max_agent_turns": 100, "model_input_tokens": 64000},
+        }
+    )
+
+
+def _basic_economy_state(first_user_msg):
+    res = {
+        "cabin": "basic_economy",
+        "flights": [{"flight_number": "AA1", "date": "2024-05-20"}],
+        "payment_history": [{"payment_id": "credit_card_1"}],
+    }
+    return {
+        "messages": [{"role": "user", "content": first_user_msg}],
+        "tau2_initial_reservations_by_id": {"RES1": dict(res)},
+        "tau2_reservations_by_id": {"RES1": dict(res)},
+    }
+
+
+def test_tau2_prompt_gates_upgrade_on_explicit_consent():
+    from course_agent.student_tools.prompts import build_tau2_system_prompt
+
+    prompt = build_tau2_system_prompt(_tau_request([{"name": "respond_to_user"}])).lower()
+    # The gate must be present.
+    assert "explicitly agrees to pay for the upgrade" in prompt
+    assert "combined net cost" in prompt
+    # The consent/budget gate heading must be present.
+    assert "consent + budget gated" in prompt
+    assert "must not take this 2-step path unless both conditions hold" in prompt
+    # The old unconditional "just use the 2-step path" instruction must be gone.
+    assert "use the 2-step path: **step 1**" not in prompt
+
+
+def test_tau2_note_does_not_unconditionally_push_upgrade():
+    from course_agent.student_tools import build_ephemeral_turn_note
+
+    req = _tau_request_at_step([{"name": "respond_to_user"}], step=2)
+    note = build_ephemeral_turn_note(
+        req, _basic_economy_state("I need to change my flight to a nonstop please.")
+    )
+    assert note is not None
+    assert "explicitly agrees to pay for an upgrade" in note.lower()
+    # The old pushy line must be gone.
+    assert "do not steer them to keep current flights" not in note.lower()

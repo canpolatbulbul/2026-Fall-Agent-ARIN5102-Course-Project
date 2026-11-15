@@ -1,0 +1,50 @@
+{
+  "schema_version": "1.0",
+  "assignment_id": "course-agent-project-2026-tau2-consent-gate-validation",
+  "split": "probe",
+  "limits": {
+    "model_input_tokens": 64000,
+    "model_output_tokens": 4096,
+    "case_timeout_sec": 300,
+    "llm_max_attempts": 2,
+    "benchmarks": {
+      "tau2_airline": {
+        "max_agent_turns": 100,
+        "max_environment_steps": 200,
+        "max_tool_calls_per_turn": 3,
+        "max_mutating_tool_calls_per_turn": 1
+      }
+    }
+  },
+  "scoring": {
+    "method": "binary_case_count_average",
+    "weights": {"per_case": 1},
+    "baseline_anchors": {
+      "tau2_airline": 0.4166666666666667
+    },
+    "baseline_anchors_note": "Reference only: course baseline completion rate for tau2 Airline. Local measurement config, not a course assignment."
+  },
+  "selection_source": {
+    "selection_manifest": "tau2_consent_gate_validation_manual",
+    "selection_date": "2026-11-15",
+    "note": "Targeted validation for the basic_economy consent/budget gate. Includes public canary task 32 (golden requires the 2-step upgrade path), the two gated failures 19/31, three currently-passing 2-step tasks 13/22/30, and the two transfer failures 24/35. Local measurement only."
+  },
+  "benchmarks": {
+    "tau2_airline": {
+      "enabled": true,
+      "runner": "tau2_airline",
+      "description": "Targeted tau2 Airline validation set (consent/budget gate).",
+      "domain": "airline",
+      "cases": [
+        {"case_key": "tau2_32", "case_id": "32", "description": "Public canary: golden requires the 2-step upgrade path.", "weight": 1},
+        {"case_key": "npp_tau2_13", "case_id": "13", "description": "Non-public: 2-step path, previously passing.", "weight": 1},
+        {"case_key": "npp_tau2_22", "case_id": "22", "description": "Non-public: 2-step path, previously passing.", "weight": 1},
+        {"case_key": "npp_tau2_30", "case_id": "30", "description": "Non-public: modification, previously passing.", "weight": 1},
+        {"case_key": "npp_tau2_19", "case_id": "19", "description": "Non-public: gated failure - want cancel, not paid upgrade.", "weight": 1},
+        {"case_key": "npp_tau2_31", "case_id": "31", "description": "Non-public: gated failure - price cap, no upgrade consent.", "weight": 1},
+        {"case_key": "npp_tau2_24", "case_id": "24", "description": "Non-public: transfer failure - abandoned bookable intent.", "weight": 1},
+        {"case_key": "npp_tau2_35", "case_id": "35", "description": "Non-public: transfer failure - abandoned bookable intent.", "weight": 1}
+      ]
+    }
+  }
+}

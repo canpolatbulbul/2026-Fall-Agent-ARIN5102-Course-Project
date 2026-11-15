@@ -123,10 +123,13 @@ def build_tau2_system_prompt(request: AgentRequest) -> str:
    - **Flight Modification & Cabin Change Rules (CRITICAL)**:
      - Basic economy flights CANNOT have their flights modified directly, **HOWEVER** all unflown reservations (including `basic_economy`) CAN change their cabin class (e.g. upgrade from `basic_economy` to `economy`) if keeping the same flights!
      - **Payment Method for Cabin Upgrades**: Any single payment method in the user's profile (`gift_card_*` or `credit_card_*` with sufficient balance) is allowed for `update_reservation_flights` and `update_reservation_baggages`! If a customer asks to upgrade from `basic_economy` to `economy` (keeping the same flights) and prefers to use a **gift card** with sufficient balance, use that **gift card** (do NOT claim that `basic_economy` upgrades require a credit card)!
-     - **CRITICAL `basic_economy` Flight Change Rule (ONLY when customer wants to change to different flights, NOT when cancelling!)**:
-       - When a customer with a `basic_economy` reservation asks to **change/switch to a different flight** (e.g. switch to a nonstop flight), NEVER call `transfer_to_human_agents`! Instead:
-         1. Call `search_direct_flight` for their route/date so you have the `economy` prices for both their current flights and their desired new flight.
-         2. Offer the 2-step policy-compliant path: **Step 1**: first upgrade their existing reservation (keeping the current flights) from `basic_economy` to `economy` (asking for confirmation), and **Step 2**: once confirmed and upgraded to `economy`, separately ask confirmation and change the flights to the desired new flight, **using the EXACT SAME `payment_id` from Step 1 for the Step 2 refund/payment**!
+     - **CRITICAL `basic_economy` Flight Change Rule (CONSENT + BUDGET GATED — do NOT apply it automatically!)**:
+       - A `basic_economy` reservation's flights **cannot be modified directly** (policy: "basic economy flights cannot be modified"). The only way to reach different flights is a **paid** 2-step path: **Step 1** upgrade the reservation (keeping current flights) from `basic_economy` to `economy`; **Step 2** once upgraded, change the flights to the desired ones, using the EXACT SAME `payment_id` from Step 1 for the Step 2 refund/payment.
+       - **You MUST NOT take this 2-step path unless BOTH conditions hold:**
+         1. The customer **explicitly agrees to pay for the upgrade** (`basic_economy` → `economy`). A bare request to "change"/"switch" flights, or a stated price cap ("only if it costs less than $X"), is **NOT** consent to a paid upgrade — ASK first and get a clear "yes" to the upgrade itself.
+         2. The **combined net cost** of both steps (`(Step 1 upgrade charge) + (Step 2 fare difference) = new economy total − original basic_economy total`) is within any budget the customer stated.
+       - If the customer does **not** consent to a paid upgrade and the change cannot be made for free within their stated budget, then take **NO mutating action**: explain that modifying a basic economy flight requires a paid upgrade, state the exact net cost, and let the customer decide. Do NOT silently perform the upgrade.
+       - If the customer **prefers to cancel, or is willing to cancel** (e.g. "if it can't be changed, I'll cancel and rebook later") and cancellation is **policy-eligible**, then cancel the reservation instead of taking the 2-step path (cancellation eligibility: booked <24h, or airline-cancelled flight, or `business` cabin, or travel insurance with a health/weather reason — e.g. `basic_economy` + travel insurance + a health reason IS eligible).
        - Conversely, if a customer asks to **cancel** an ineligible `basic_economy` reservation (>24h, on time, no insurance), do NOT offer the 2-step `economy` upgrade path (because `economy` is also non-refundable!).
      - **Changing/Downgrading Multiple Reservations ("all my business class flights")**:
        - When a customer asks to change/downgrade ALL their reservations of a certain cabin (e.g., all business class tickets to economy) and does not remember which payment method they used:
@@ -145,7 +148,7 @@ def build_tau2_system_prompt(request: AgentRequest) -> str:
      - Cancelled flight complaint: `$100 * number_of_passengers`.
      - Delayed flight complaint + user changes or cancels reservation: `$50 * number_of_passengers` (only after changing/cancelling).
    - **Transfer to Human Agent**:
-     - Only transfer if the request violates policy/scope and cannot be handled. First call `transfer_to_human_agents`, and then on the next turn respond with `'YOU ARE BEING TRANSFERRED TO A HUMAN AGENT. PLEASE HOLD ON.'`.
+     - Only transfer if the request violates policy/scope and cannot be handled. **Before transferring, complete every part of the customer's request that CAN be handled** (e.g. book/modify a separate reservation, or fulfil a second, independent intent). Do NOT transfer while any part of the request is still handleable — only transfer once the only remaining items are genuinely unhandleable. First call `transfer_to_human_agents`, and then on the next turn respond with `'YOU ARE BEING TRANSFERRED TO A HUMAN AGENT. PLEASE HOLD ON.'`.
 """
 
 
@@ -405,11 +408,13 @@ def build_ephemeral_turn_note(request: AgentRequest, state: dict[str, Any]) -> s
             ):
                 f_nums = [str(f.get("flight_number")) for f in (rdata.get("flights") or []) if isinstance(f, dict)]
                 notes.append(
-                    f"[Tau2 Policy Reminder for {rid}]: Reservation `{rid}` started as `basic_economy` (initial flights: {f_nums}) and the customer wants to switch flights. "
-                    "Do NOT call `transfer_to_human_agents`! Use the 2-step path: **Step 1**: upgrade "
-                    f"`{rid}` (keeping flights {f_nums}) from `basic_economy` to `economy` using the customer's credit card on file (ask confirmation first); "
-                    "**Step 2**: once upgraded to `economy`, separately ask confirmation and change to the new nonstop flight **using the EXACT SAME credit card `payment_id` from Step 1** (do NOT propose or switch to a gift card in Step 2)! "
-                    "**CRITICAL WHEN CUSTOMER HAS A BUDGET LIMIT FOR THE CHANGE**: Always compute and emphasize the **COMBINED NET COST** across both steps: `(Step 1 upgrade charge) + (Step 2 fare difference/refund) = (New flight economy total) - (Original basic_economy total)`. Whenever the combined net cost is within the customer's budget (or is a net refund!), reassure the customer that the Step 1 charge is immediately offset by the Step 2 refund so their net cost is well within budget, and ask them to reply `'yes'` to proceed with Step 1 (do NOT steer them to keep current flights)!"
+                    f"[Tau2 Policy Reminder for {rid}]: Reservation `{rid}` started as `basic_economy` (initial flights: {f_nums}) and the customer wants different flights. "
+                    "Policy: basic economy flights cannot be modified directly. Do NOT automatically run the paid upgrade. Only take the paid 2-step path "
+                    "if the customer EXPLICITLY agrees to pay for an upgrade (basic_economy -> economy) AND the combined net cost stays within any stated budget. "
+                    f"2-step = **Step 1** upgrade `{rid}` keeping flights {f_nums}; **Step 2** then change the flights, using the EXACT SAME `payment_id` from Step 1. "
+                    "If the customer only wants a change within a price cap and does NOT agree to a paid upgrade, and the change cannot be done for free within that cap, take NO mutating action: state the exact combined net cost and let the customer decide. "
+                    "Do NOT assume consent to the upgrade from a bare change/switch request or a price cap. "
+                    "If the customer prefers or accepts cancelling and a health/weather or other cancellation rule applies, cancel instead of the upgrade path!"
                 )
             if isinstance(rdata, dict) and "same as my current reservation" in first_user_msg:
                 f_list = rdata.get("flights") or []
