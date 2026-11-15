@@ -4,6 +4,10 @@ from course_agent.student_tools.data_helpers import (
     normalize_mcpmark_read_artifact,
     summarize_mcpmark_mutations,
 )
+from course_agent.student_tools.deterministic_mcpmark import (
+    DeterministicDecision,
+    plan_deterministic_mcpmark,
+)
 from course_agent.student_tools.history import (
     build_messages_within_budget,
     ingest_turn_observation,
@@ -29,6 +33,7 @@ from course_agent.student_tools.prompts import (
 )
 
 __all__ = [
+    "DeterministicDecision",
     "SanitizedToolCall",
     "build_deepplanning_initial_user_message",
     "build_deepplanning_system_prompt",
@@ -46,6 +51,7 @@ __all__ = [
     "init_case_state",
     "normalize_mcpmark_read_artifact",
     "normalize_tools_for_openai",
+    "plan_deterministic_mcpmark",
     "record_assistant_final",
     "record_assistant_tool_calls",
     "sanitize_tool_calls",

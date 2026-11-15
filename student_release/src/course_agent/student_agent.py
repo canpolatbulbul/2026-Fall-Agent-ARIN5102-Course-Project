@@ -22,6 +22,7 @@ from course_agent.student_tools import (
     init_case_state,
     normalize_mcpmark_read_artifact,
     normalize_tools_for_openai,
+    plan_deterministic_mcpmark,
     record_assistant_final,
     record_assistant_tool_calls,
     sanitize_tool_calls,
@@ -463,6 +464,21 @@ class StudentAgent:
             pending_mcp_reads = get_pending_mcpmark_batch_reads(request, state)
             if pending_mcp_reads:
                 return self._emit_sanitized_calls(request, state, "", pending_mcp_reads)
+
+            decision = plan_deterministic_mcpmark(request, state)
+            if decision is not None:
+                if decision.is_final:
+                    record_assistant_final(state, "")
+                    return AgentResponse.final(request.request_id, "")
+                if decision.calls:
+                    safe_calls = sanitize_tool_calls(
+                        benchmark="mcpmark",
+                        raw_calls=list(decision.calls),
+                        available_tools=request.tools,
+                        limits=request.limits,
+                    )
+                    if safe_calls:
+                        return self._emit_sanitized_calls(request, state, "", safe_calls)
 
         # Deterministic catalog pre-fetch for DeepPlanning so BM25 top-20 never misses the cheapest item
         if (
