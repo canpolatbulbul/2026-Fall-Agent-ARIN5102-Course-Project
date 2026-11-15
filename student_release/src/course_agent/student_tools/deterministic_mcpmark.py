@@ -526,10 +526,137 @@ def _duplicates_searching_solver(
     return DeterministicDecision(is_final=True)
 
 
+# ---------------------------------------------------------------------------
+# timeline_extraction solver
+# ---------------------------------------------------------------------------
+
+# The tool gate mirrors the filesystem tasks' shared toolset; recognition
+# safety rests on the instruction substrings ("timeline" plus "2024").
+_TIMELINE_REQUIRED_TOOLS = ("write_file", "read_multiple_files", "directory_tree")
+
+# A full date: ``2024-03-15``. A line may carry several (a period); the earliest
+# wins.
+_FULL_DATE_RE = re.compile(r"\b2024-\d{2}-\d{2}\b")
+# A placeholder day: ``2024-08-XX`` -> the 1st of that month.
+_YEAR_MONTH_XX_RE = re.compile(r"2024-(\d{2})-XX")
+# A full, word-bounded month name (case-sensitive; "November's" still matches).
+_MONTH_NAME_RE = re.compile(
+    r"\b(January|February|March|April|May|June|July|August|September"
+    r"|October|November|December)\b"
+)
+_MONTH_NUMBERS = {
+    "January": "01",
+    "February": "02",
+    "March": "03",
+    "April": "04",
+    "May": "05",
+    "June": "06",
+    "July": "07",
+    "August": "08",
+    "September": "09",
+    "October": "10",
+    "November": "11",
+    "December": "12",
+}
+
+
+def _timeline_date_for_line(line: str, path_has_2024: bool) -> str | None:
+    """Extract at most one ``YYYY-MM-DD`` date from ``line`` by fixed precedence.
+
+    - a full ``2024-MM-DD`` date (earliest on the line if several),
+    - else a ``2024-MM-XX`` placeholder -> ``2024-MM-01``,
+    - else a full month name that is anchored to 2024 by a literal ``2024`` on
+      the line or a ``2024`` path segment -> ``2024-MM-01``,
+    - else ``None`` (bare year or a month with no 2024 token/segment).
+    """
+    full_dates = _FULL_DATE_RE.findall(line)
+    if full_dates:
+        return min(full_dates)
+
+    placeholder = _YEAR_MONTH_XX_RE.search(line)
+    if placeholder is not None:
+        return f"2024-{placeholder.group(1)}-01"
+
+    month = _MONTH_NAME_RE.search(line)
+    if month is not None and ("2024" in line or path_has_2024):
+        return f"2024-{_MONTH_NUMBERS[month.group(1)]}-01"
+
+    return None
+
+
+def _render_timeline(contents: dict[str, str], test_dir: str) -> str:
+    """Render the sorted, deduped ``relative_path:YYYY-MM-DD`` timeline content.
+
+    Emits one line per (file, date), sorted by ``(date, relative_path)`` with
+    forward-slash relative paths (the output-format contract).
+    """
+    entries: set[tuple[str, str]] = set()
+    for path, content in contents.items():
+        rel = os.path.relpath(path, test_dir).replace(os.sep, "/")
+        path_has_2024 = "2024" in rel.split("/")
+        for line in content.splitlines():
+            date = _timeline_date_for_line(line, path_has_2024)
+            if date is not None:
+                entries.add((date, rel))
+    ordered = sorted(entries, key=lambda entry: (entry[0], entry[1]))
+    return "\n".join(f"{rel}:{date}" for date, rel in ordered)
+
+
+def _timeline_extraction_solver(
+    request: AgentRequest,
+    state: dict[str, Any],
+) -> DeterministicDecision | None:
+    """Extract every 2024 time/plan date into a sorted ``timeline.txt``.
+
+    Re-entrant: the timeline is recomputed from
+    ``request.observation["tool_results"]`` on every call. Overwrite-on-mismatch
+    (mirroring file_splitting): only final once the recorded ``timeline.txt``
+    content equals the intended content, so a stale/wrong artifact can never be
+    shipped as complete.
+    """
+    instruction = _instruction(request)
+    if "timeline" not in instruction or "2024" not in instruction:
+        return None
+
+    obs = request.observation or {}
+    test_dir = str(obs.get("test_directory") or "")
+    if not test_dir:
+        return None
+
+    if not all(_has_tool(request, name) for name in _TIMELINE_REQUIRED_TOOLS):
+        return None
+
+    decision, contents = _read_all_files(request, test_dir, state)
+    if decision is not None:
+        return decision
+    if contents is None:
+        return None
+
+    timeline = _render_timeline(contents, test_dir)
+    timeline_path = os.path.join(test_dir, "timeline.txt")
+
+    tool_results = obs.get("tool_results")
+    if not isinstance(tool_results, list):
+        tool_results = []
+    written = get_written_files_from_tool_results(_non_failed_results(tool_results))
+    if written.get(timeline_path) != timeline:
+        return DeterministicDecision(
+            calls=[
+                SanitizedToolCall(
+                    name="write_file",
+                    arguments={"path": timeline_path, "content": timeline},
+                )
+            ]
+        )
+
+    return DeterministicDecision(is_final=True)
+
+
 # Registered solvers, tried in order by ``plan_deterministic_mcpmark``.
 _SOLVERS: tuple[Callable[[AgentRequest, dict[str, Any]], DeterministicDecision | None], ...] = (
     _file_splitting_solver,
     _duplicates_searching_solver,
+    _timeline_extraction_solver,
 )
 
 
