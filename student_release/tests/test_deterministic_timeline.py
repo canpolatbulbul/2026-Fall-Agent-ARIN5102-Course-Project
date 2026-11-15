@@ -7,17 +7,15 @@ import pytest
 from course_agent.student_tools.deterministic_mcpmark import (
     _timeline_extraction_solver,
 )
-from mcpmark_fs_sim import drive, make_request, run_verify
+from mcpmark_fs_sim import drive, make_request, read_desc, run_verify
 
 REPO = Path(__file__).resolve().parents[2]
 TASKS = REPO / "third_party/mcpmark/tasks/filesystem"
 TASK = TASKS / "standard/desktop/timeline_extraction"
 ENV = REPO / "third_party/mcpmark/test_environments/desktop"
 VERIFY = TASK / "verify.py"
-DESC = (TASK / "description.md").read_text()
-OTHER_DESC = (
-    TASKS / "standard/file_context/duplicates_searching/description.md"
-).read_text()
+DESC = read_desc(TASK / "description.md")
+OTHER_DESC = read_desc(TASKS / "standard/file_context/duplicates_searching/description.md")
 TOOLS = [
     {"name": "directory_tree", "annotations": {"readOnlyHint": True}},
     {"name": "read_multiple_files", "annotations": {"readOnlyHint": True}},

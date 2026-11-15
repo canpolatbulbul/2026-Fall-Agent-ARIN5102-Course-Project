@@ -31,6 +31,17 @@ from course_agent.student_tools.policy_guard import (
     sanitize_tool_calls,
 )
 
+
+def read_desc(path) -> str:
+    """Read a task ``description.md``, returning "" when the pinned MCPMark data
+    is absent (e.g. on a clean checkout, since ``third_party/`` is gitignored).
+    Keeps module-level reads from turning the auto-skip guard into a collection error.
+    """
+    try:
+        return Path(path).read_text()
+    except OSError:
+        return ""
+
 _DEFAULT_LIMITS: dict[str, Any] = {
     "max_mutating_tool_calls_per_turn": 1,
     "max_tool_calls_per_turn": 4,

@@ -7,15 +7,15 @@ from course_agent.student_tools.deterministic_mcpmark import (
     _duplicates_searching_solver,
     _read_all_files,
 )
-from mcpmark_fs_sim import drive, make_request, run_verify
+from mcpmark_fs_sim import drive, make_request, read_desc, run_verify
 
 REPO = Path(__file__).resolve().parents[2]
 TASKS = REPO / "third_party/mcpmark/tasks/filesystem"
 TASK = TASKS / "standard/file_context/duplicates_searching"
 ENV = REPO / "third_party/mcpmark/test_environments/file_context"
 VERIFY = TASK / "verify.py"
-DESC = (TASK / "description.md").read_text()
-SPLIT_DESC = (TASKS / "easy/file_context/file_splitting/description.md").read_text()
+DESC = read_desc(TASK / "description.md")
+SPLIT_DESC = read_desc(TASKS / "easy/file_context/file_splitting/description.md")
 
 # read-only tools carry readOnlyHint so classify_tool matches production (policy_guard.py:139).
 TOOLS = [
