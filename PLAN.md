@@ -586,6 +586,22 @@ Two official updates were announced by the Teaching Team after the initial relea
 - Projection: with held-out-like rates (mcpmark ~0.54, tau2 ~0.60, dp ~0.80) and 60-100 above-baseline
   scaling, overall ~78. A perfect score is not reachable given tau2's reference-path traps.
 
+## Public tau2 12-case regression check after the customer-initiated change (2026-11-16, run `20261115T171827Z-13ff4427`)
+
+- Re-ran all 12 public tau2 cases with the final prompts (commits `0de3458` + `93eb5aa`): **12/12**
+  (baseline pre-change public-40 run was 10/12: fails were 25 and 6).
+- Per-case verdict vs baseline: all 10 baseline passes held (2, 8, 17, 18, 20, 28, 32, 36, 40, 49);
+  the two former fails 6 and 25 now pass. **No case regressed.** Blast-radius canary 32 held at 1.0.
+- 4 cases auto-resumed (runner `attempt_ended_without_usage`) but all recovered to `scored_success`;
+  no scoring distortion. Cost 139 LLM calls / ~1.45M tokens.
+- Interpretation: on the only visible tau2 set, the change is a strict improvement (10 -> 12) with no
+  downside. Combined with the hidden-like +2/-1 (31, 35 fixed; 22 regressed), the change is kept.
+- **Compliance re-audited vs the TA announcement:** only `student_tools/` helpers (no direct
+  filesystem/DB/env access; all env I/O via benchmark tools); `git diff b87473b..HEAD` over
+  `protocol.py`/`runtime.py`/`agent_process.py`/`public_runner/`/`third_party/`/`shared/`/deps is
+  **empty** -> no locked file touched. Solution is in line with the announcement.
+- Remaining blocker: `submission.json` metadata (student_id/name/email), then run `build_submission.py`.
+
 ## Agent Handoff Notes
 
 1. Read `AGENTS.md` first — it covers project structure, all commands, and gotchas.
