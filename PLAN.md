@@ -540,6 +540,34 @@ Two official updates were announced by the Teaching Team after the initial relea
   are above their anchors; the gap to worry about is tau2's thin margin and its dependence on LLM
   behaviour we do not control deterministically.
 
+## Tau2 Consent-Gate Validation (2026-11-15, official backend, run `20261115T152040Z-128fe490`)
+
+- Change under test (commit `0de3458`): gated the `basic_economy` flight-change on explicit
+  customer consent to a paid upgrade + budget, and added "complete handleable intents before
+  transfer". Two offline unit tests added.
+- Targeted 8-case set `{32,13,22,30,19,31,24,35}`: result **4/8**, net-neutral vs the
+  pre-change 4/8 expectation. Cost 135 LLM calls / ~1.42M tokens.
+  - Held: 32 (public canary) 1.0, 13 1.0, 30 1.0. Fixed: 35 1.0.
+  - **New failure: 22 regressed to 0.0** (attempt 1 was interrupted by the runner
+    `attempt_ended_without_usage`; auto-resumed, and on attempt 2 the agent did only 2 of the 3
+    golden actions — skipped `update_reservation_baggages`).
+  - **Not fixed: 19 and 31.** The consent gate did not stop the upgrade, and could not: on the
+    scored attempts the agent *solicited* the upgrade and the **user simulator explicitly agreed**
+    (19: "Yes, I agree to the paid upgrade to economy"; 31: "the net cost ... is $81 ... I would
+    like to proceed ... Please charge my credit card"). The golden expects 19 = cancel and
+    31 = NO action, yet an agreeable simulator consents to whatever the agent proposes.
+  - **Not fixed: 24.** The agent transferred on turn 1 before any booking; golden = book.
+- **Root-cause correction (supersedes the earlier "consent gate" theory):** 19 and 31 are not
+  consent failures. The distinguishing variable vs passing task 32 is *who raises the upgrade*:
+  32's customer **volunteers** "I would like to change my cabin to economy" (golden = upgrade);
+  in 19/31 the upgrade is only ever **agent-solicited**, and the reactive simulator then agrees.
+  These look like reference-path traps (the reference agent declined / cancelled), similar in kind
+  to the DeepPlanning reference-cart tie.
+- Consequence: a prose "ask for consent" gate cannot fix 19/31; only a rule that stops the agent
+  from *offering* the upgrade (acting only when the customer independently asks to change cabin)
+  could — an LLM-behaviour change with real regression risk. The transfer case (24) is the only
+  cleanly code-fixable one.
+
 ## Agent Handoff Notes
 
 1. Read `AGENTS.md` first — it covers project structure, all commands, and gotchas.
