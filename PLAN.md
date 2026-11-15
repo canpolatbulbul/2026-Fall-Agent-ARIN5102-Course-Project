@@ -486,6 +486,29 @@ Two official updates were announced by the Teaching Team after the initial relea
   remain fully LLM-driven and therefore carry run-to-run variance. This is a *variance* risk, not a
   systematic weakness — the deterministic MCPMark work cannot influence these two.
 
+## Non-Public Tau2 Measurement (2026-11-15, official backend, run `20261115T140517Z-9b1f9f66`)
+
+- Result: **5/10 (0.50)** — 86 LLM calls / ~0.87M tokens. Above the course baseline (0.4167) but
+  far below the public set (10/12) and the earlier 3/3 probe. Non-public tau2 is much harder; the
+  public/probe samples were optimistic.
+- Failure taxonomy (all LLM decision errors; no code bug, deterministic path does not cover tau2):
+  - **task 24 & 35 — transfer-loop / incomplete task (2 cases).** The agent repeatedly called
+    `transfer_to_human_agents` (12× in task 35!) instead of completing the bookable intent, never
+    reached `book_reservation`. Task 35's user explicitly rejects transfer. Our prompt (`prompts.py`
+    line 147-148) authorises transfer when "request violates policy/scope" but does **not** cap the
+    number of transfers or force progress on remaining multi-intent goals.
+  - **task 19 & 31 — invalid mutation when none was required (2 cases).** task 19: performed
+    `update_reservation_flights` on a `basic_economy` reservation that cannot be modified (golden =
+    `cancel_reservation`). task 31: modified the reservation when the change exceeded the user's
+    <$100 limit (golden = no actions, agent should decline).
+  - **task 29 — wrong args on a correct action (1 case).** Cancelled correctly, but rebooked with the
+    wrong return date (2024-05-20 vs golden 2024-05-19) and `insurance=yes`.
+- Strategic implication: hidden tau2 is likely to land near this rate, not the public 12/12. 0.50 is
+  still above baseline, so scoring remains in the >baseline band, but the margin is thin. A cheap,
+  targeted prompt/guard fix for the transfer loop (2 of 5 failures, both 0-cost to reason about) is
+  the highest-value candidate if any further work is done; it would need a validating run to confirm
+  no regression on the currently-passing cases.
+
 ## Agent Handoff Notes
 
 1. Read `AGENTS.md` first — it covers project structure, all commands, and gotchas.
