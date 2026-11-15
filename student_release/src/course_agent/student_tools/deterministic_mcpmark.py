@@ -19,6 +19,7 @@ registered in ``_SOLVERS`` by later tasks.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 from dataclasses import dataclass, field
@@ -303,9 +304,232 @@ def _file_splitting_solver(
     return DeterministicDecision(is_final=True)
 
 
+# ---------------------------------------------------------------------------
+# duplicates_searching solver + shared batch listing/read phase
+# ---------------------------------------------------------------------------
+
+# The tool gate is decorative for filesystem tasks (all file_context tasks share
+# the same toolset); recognition safety rests on the instruction substrings
+# ("duplicate" plus "identical content"/"same content").
+_DUPLICATES_REQUIRED_TOOLS = (
+    "move_file",
+    "create_directory",
+    "read_multiple_files",
+    "directory_tree",
+)
+
+
+def _directory_tree_paths(tool_results: list[Any], test_dir: str) -> list[str] | None:
+    """Return sorted absolute file paths discovered from the directory tree.
+
+    Uses the most recent non-failed ``directory_tree`` result whose argument
+    ``path`` (normalized) equals ``test_dir``; returns ``None`` when no such
+    result exists. Descends ``children`` recursively, excludes any node whose
+    name starts with ``.``, and joins each relative name onto ``test_dir`` (the
+    absolute-path invariant).
+    """
+    target = os.path.normpath(test_dir)
+    tree: list[Any] | None = None
+    for item in tool_results:
+        if not isinstance(item, dict):
+            continue
+        if item.get("tool_name") != "directory_tree":
+            continue
+        targs = item.get("tool_arguments") if isinstance(item.get("tool_arguments"), dict) else {}
+        if os.path.normpath(str(targs.get("path") or "")) != target:
+            continue
+        if mcpmark_item_failed(item)[0]:
+            continue
+        text = extract_mcp_text(item)
+        if not text:
+            continue
+        try:
+            parsed = json.loads(text)
+        except Exception:
+            continue
+        if isinstance(parsed, list):
+            tree = parsed
+    if tree is None:
+        return None
+
+    paths: list[str] = []
+
+    def walk(nodes: list[Any], rel_prefix: str) -> None:
+        for node in nodes:
+            if not isinstance(node, dict):
+                continue
+            name = str(node.get("name") or "")
+            if not name or name.startswith("."):
+                continue
+            rel = os.path.join(rel_prefix, name) if rel_prefix else name
+            ntype = str(node.get("type") or "")
+            if ntype == "directory":
+                children = node.get("children")
+                if isinstance(children, list):
+                    walk(children, rel)
+            elif ntype == "file":
+                paths.append(os.path.join(test_dir, rel))
+
+    walk(tree, "")
+    return sorted(paths)
+
+
+def _full_batch_read_executed(tool_results: list[Any], discovered: list[str]) -> bool:
+    """Return True iff a non-failed ``read_multiple_files`` covered every discovered path.
+
+    Paths are compared with ``os.path.normpath`` so cosmetic separators do not
+    hide an already-executed batch (which would otherwise be re-emitted forever).
+    """
+    target = [os.path.normpath(p) for p in discovered]
+    for item in _non_failed_results(tool_results):
+        if item.get("tool_name") != "read_multiple_files":
+            continue
+        targs = item.get("tool_arguments") if isinstance(item.get("tool_arguments"), dict) else {}
+        paths = targs.get("paths")
+        if not isinstance(paths, list):
+            continue
+        if [os.path.normpath(str(p)) for p in paths] == target:
+            return True
+    return False
+
+
+def _read_all_files(
+    request: AgentRequest,
+    test_dir: str,
+    state: dict[str, Any],
+) -> tuple[DeterministicDecision | None, dict[str, str] | None]:
+    """Shared listing/read phase for deterministic filesystem solvers.
+
+    Returns ``(decision, None)`` to emit a ``directory_tree`` (when no tree is
+    recorded yet) or a ``read_multiple_files`` batch built from
+    :func:`_directory_tree_paths`; ``(None, {abs_path: content})`` once every
+    discovered path has been read; and ``(None, None)`` after latching
+    ``state["det_disabled"]`` when a full-set ``read_multiple_files`` already
+    executed yet a discovered path is still absent (an inline per-file
+    ``Error -`` that re-emitting would only spin on). ``contents is None`` means
+    hand back to the LLM; a non-empty dict means proceed.
+    """
+    obs = request.observation or {}
+    tool_results = obs.get("tool_results")
+    if not isinstance(tool_results, list):
+        tool_results = []
+
+    discovered = _directory_tree_paths(tool_results, test_dir)
+    if discovered is None:
+        return (
+            DeterministicDecision(
+                calls=[SanitizedToolCall(name="directory_tree", arguments={"path": test_dir})]
+            ),
+            None,
+        )
+
+    reads = parse_read_files_from_tool_results(_non_failed_results(tool_results))
+    reads_norm = {os.path.normpath(path): content for path, content in reads.items()}
+
+    if all(os.path.normpath(p) in reads_norm for p in discovered):
+        return None, {p: reads_norm[os.path.normpath(p)] for p in discovered}
+
+    if _full_batch_read_executed(tool_results, discovered):
+        state["det_disabled"] = True
+        return None, None
+
+    return (
+        DeterministicDecision(
+            calls=[
+                SanitizedToolCall(
+                    name="read_multiple_files",
+                    arguments={"paths": list(discovered)},
+                )
+            ]
+        ),
+        None,
+    )
+
+
+def _move_done(tool_results: list[Any], source: str, destination: str) -> bool:
+    """Return True iff a non-failed ``move_file`` from ``source`` to ``destination`` exists."""
+    src = os.path.normpath(source)
+    dst = os.path.normpath(destination)
+    for item in tool_results:
+        if not isinstance(item, dict):
+            continue
+        if item.get("tool_name") != "move_file":
+            continue
+        targs = item.get("tool_arguments") if isinstance(item.get("tool_arguments"), dict) else {}
+        if os.path.normpath(str(targs.get("source") or "")) != src:
+            continue
+        if os.path.normpath(str(targs.get("destination") or "")) != dst:
+            continue
+        if not mcpmark_item_failed(item)[0]:
+            return True
+    return False
+
+
+def _duplicates_searching_solver(
+    request: AgentRequest,
+    state: dict[str, Any],
+) -> DeterministicDecision | None:
+    """Move every file whose exact content repeats into a ``duplicates`` directory.
+
+    Re-entrant: the duplicate set is recomputed from
+    ``request.observation["tool_results"]`` each turn, so the plan resumes
+    correctly after interruptions. Emits at most one mutating call per turn
+    (reads before mutations) and hands back to the LLM on an unreadable file.
+    """
+    instruction = _instruction(request)
+    obs = request.observation or {}
+    test_dir = str(obs.get("test_directory") or "")
+    if not test_dir:
+        return None
+    if not all(_has_tool(request, name) for name in _DUPLICATES_REQUIRED_TOOLS):
+        return None
+    if "duplicate" not in instruction:
+        return None
+    if "identical content" not in instruction and "same content" not in instruction:
+        return None
+
+    decision, contents = _read_all_files(request, test_dir, state)
+    if decision is not None:
+        return decision
+    if contents is None:
+        return None
+
+    groups: dict[str, list[str]] = {}
+    for path, content in contents.items():
+        groups.setdefault(content, []).append(path)
+    duplicates = sorted(path for paths in groups.values() if len(paths) >= 2 for path in paths)
+    if not duplicates:
+        return DeterministicDecision(is_final=True)
+
+    tool_results = obs.get("tool_results")
+    if not isinstance(tool_results, list):
+        tool_results = []
+
+    duplicates_dir = os.path.join(test_dir, "duplicates")
+    if not _directory_created(tool_results, duplicates_dir):
+        return DeterministicDecision(
+            calls=[SanitizedToolCall(name="create_directory", arguments={"path": duplicates_dir})]
+        )
+
+    for abs_path in duplicates:
+        destination = os.path.join(duplicates_dir, os.path.basename(abs_path))
+        if not _move_done(tool_results, abs_path, destination):
+            return DeterministicDecision(
+                calls=[
+                    SanitizedToolCall(
+                        name="move_file",
+                        arguments={"source": abs_path, "destination": destination},
+                    )
+                ]
+            )
+
+    return DeterministicDecision(is_final=True)
+
+
 # Registered solvers, tried in order by ``plan_deterministic_mcpmark``.
 _SOLVERS: tuple[Callable[[AgentRequest, dict[str, Any]], DeterministicDecision | None], ...] = (
     _file_splitting_solver,
+    _duplicates_searching_solver,
 )
 
 
