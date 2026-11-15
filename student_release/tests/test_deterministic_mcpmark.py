@@ -9,6 +9,8 @@ from course_agent.student_tools.deterministic_mcpmark import (
     _emitted_call_failed_before,
     _file_splitting_solver,
     _has_read_basename,
+    _parse_split_count,
+    _split_n,
     _split_three,
     plan_deterministic_mcpmark,
 )
@@ -310,6 +312,76 @@ def test_solver_is_final_when_all_three_recorded_contents_match():
     )
     d = _file_splitting_solver(req, {})
     assert d is not None and d.is_final is True and d.calls == []
+
+
+# ---------------------------------------------------------------------------
+# Task 2 controller ruling: generalize to N files (3-file and 10-file variants).
+# ---------------------------------------------------------------------------
+
+
+def test_parse_split_count_from_exactly_n_files():
+    assert _parse_split_count("split large_file.txt into exactly 3 files") == 3
+    assert _parse_split_count("into exactly 10 files with equal character counts") == 10
+
+
+def test_parse_split_count_from_enumeration():
+    assert _parse_split_count("split_01.txt, split_02.txt, ..., split_10.txt") == 10
+
+
+def test_parse_split_count_returns_none_when_absent():
+    assert _parse_split_count("split large_file.txt into multiple smaller files") is None
+
+
+def test_parse_split_count_returns_none_when_signals_disagree():
+    assert _parse_split_count("exactly 3 files named split_01.txt ... split_10.txt") is None
+
+
+def test_split_n_preserves_content_and_is_near_equal():
+    s = "abcdefghij"  # 10 chars
+    parts = _split_n(s, 10)
+    assert "".join(parts) == s
+    assert len(parts) == 10
+    assert max(map(len, parts)) - min(map(len, parts)) <= 1
+
+
+def test_solver_recognizes_standard_ten_file_variant():
+    instr = _desc("standard/file_context/file_splitting/description.md")
+    if not instr:
+        instr = (
+            "Split large_file.txt into exactly 10 files with equal character counts. "
+            "Name the files as split_01.txt, split_02.txt, ..., split_10.txt."
+        )
+    assert _parse_split_count(instr) == 10
+
+    # First turn: read the source file.
+    d = _file_splitting_solver(_req(instruction=instr), {})
+    assert d is not None and d.calls[0].name == "read_text_file"
+
+    # After read + create_directory: the first write is split_01.txt.
+    d = _file_splitting_solver(
+        _req(instruction=instr, tool_results=[_read_result(), _create_dir_result()]), {}
+    )
+    assert d is not None and d.calls[0].name == "write_file"
+    assert d.calls[0].arguments["path"] == os.path.join(SPLIT_DIR, "split_01.txt")
+
+
+def test_solver_ten_file_is_final_when_all_ten_recorded_contents_match():
+    instr = _desc("standard/file_context/file_splitting/description.md")
+    if not instr:
+        instr = "large_file.txt split into exactly 10 files split_01.txt ... split_10.txt"
+    parts = _split_n("abcdefghij", 10)
+    done = [
+        _write_result(path=os.path.join(SPLIT_DIR, f"split_{n:02d}.txt"), content=parts[n - 1])
+        for n in range(1, 11)
+    ]
+    req = _req(instruction=instr, tool_results=[_read_result(), _create_dir_result()] + done)
+    d = _file_splitting_solver(req, {})
+    assert d is not None and d.is_final is True and d.calls == []
+
+
+def test_solver_returns_none_for_ambiguous_or_absent_count():
+    instr = "Please split large_file.txt into smaller files in a split directory."
+    assert _file_splitting_solver(_req(instruction=instr), {}) is None
 
 
 # ---------------------------------------------------------------------------

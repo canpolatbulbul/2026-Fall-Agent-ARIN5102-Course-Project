@@ -20,6 +20,7 @@ registered in ``_SOLVERS`` by later tasks.
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
@@ -102,18 +103,50 @@ def _emitted_call_failed_before(
 
 # Recognition is a conservative conjunction of instruction markers and required
 # tools. It must NOT hijack pattern_matching (which also references
-# large_file.txt) — that task never contains the word "split".
+# large_file.txt) — that task never contains the word "split". The file count N
+# is parsed from the instruction; if it cannot be parsed unambiguously the solver
+# declines (returns None) rather than guess.
 _FILE_SPLITTING_REQUIRED_TOOLS = ("read_text_file", "write_file", "create_directory")
+
+_SPLIT_COUNT_RE = re.compile(r"exactly\s+(\d+)\s+files?\b", re.IGNORECASE)
+_SPLIT_NAME_RE = re.compile(r"split_(\d+)\.txt")
+
+
+def _parse_split_count(instruction: str) -> int | None:
+    """Parse the unambiguous number of split files N from the instruction.
+
+    Accepts an explicit "exactly <N> files" count and/or an enumeration of
+    ``split_NN.txt`` names (N taken as the largest index seen, which covers the
+    ``split_01.txt, split_02.txt, ..., split_NN.txt`` form). If both signals are
+    present and disagree, the instruction is ambiguous and ``None`` is returned.
+    """
+    count_match = _SPLIT_COUNT_RE.search(instruction)
+    explicit = int(count_match.group(1)) if count_match else None
+    indices = [int(value) for value in _SPLIT_NAME_RE.findall(instruction)]
+    enumerated = max(indices) if indices else None
+
+    if explicit is not None and enumerated is not None:
+        return explicit if explicit == enumerated else None
+    result = explicit if explicit is not None else enumerated
+    if result is None or result < 1 or result > 1000:
+        return None
+    return result
+
+
+def _split_n(content: str, n: int) -> list[str]:
+    """Split ``content`` into ``n`` contiguous, near-equal parts.
+
+    Part ``i`` is ``content[i*len//n:(i+1)*len//n]``; concatenation is exact and
+    part lengths differ by at most one, satisfying both the 3-file "similar
+    character counts" and 10-file "equal character counts" requirements.
+    """
+    length = len(content)
+    return [content[i * length // n : (i + 1) * length // n] for i in range(n)]
 
 
 def _split_three(content: str) -> list[str]:
-    """Split ``content`` into three parts whose concatenation equals it.
-
-    Parts are contiguous and their lengths differ by at most one, satisfying
-    the task's "similar character counts" requirement.
-    """
-    n = len(content)
-    return [content[: n // 3], content[n // 3 : 2 * n // 3], content[2 * n // 3 :]]
+    """Backwards-compatible 3-way split (see :func:`_split_n`)."""
+    return _split_n(content, 3)
 
 
 def _has_read_basename(request: AgentRequest, basename: str) -> bool:
@@ -150,18 +183,20 @@ def _file_splitting_solver(
     request: AgentRequest,
     state: dict[str, Any],
 ) -> DeterministicDecision | None:
-    """Deterministically split ``large_file.txt`` into three balanced files.
+    """Deterministically split ``large_file.txt`` into N balanced files.
 
-    Re-entrant: the plan is derived from ``request.observation["tool_results"]``
-    on every call, so it resumes correctly after interruptions. Emits at most
-    one mutating call per turn (reads before mutations).
+    N is parsed from the instruction (3-file and 10-file variants share this
+    solver). Re-entrant: the plan is derived from
+    ``request.observation["tool_results"]`` on every call, so it resumes correctly
+    after interruptions. Emits at most one mutating call per turn (reads before
+    mutations).
     """
     instruction = _instruction(request)
-    if (
-        "large_file.txt" not in instruction
-        or "split" not in instruction
-        or not ("split_01" in instruction or "exactly 3" in instruction or "similar character counts" in instruction)
-    ):
+    if "large_file.txt" not in instruction or "split" not in instruction:
+        return None
+
+    count = _parse_split_count(instruction)
+    if count is None:
         return None
 
     obs = request.observation or {}
@@ -188,7 +223,7 @@ def _file_splitting_solver(
             calls=[SanitizedToolCall(name="read_text_file", arguments={"path": large_path})]
         )
 
-    parts = _split_three(reads_by_basename["large_file.txt"])
+    parts = _split_n(reads_by_basename["large_file.txt"], count)
 
     # 2. Ensure the destination directory exists.
     split_dir = os.path.join(test_dir, "split")
@@ -201,8 +236,8 @@ def _file_splitting_solver(
     # differs from the computed part. Re-writing with different args is safe
     # (write_file overwrites atomically) and is not vetoed by the failure guard.
     written = get_written_files_from_tool_results(tool_results)
-    for index in range(1, 4):
-        target = os.path.join(split_dir, f"split_0{index}.txt")
+    for index in range(1, count + 1):
+        target = os.path.join(split_dir, f"split_{index:02d}.txt")
         if written.get(target) != parts[index - 1]:
             return DeterministicDecision(
                 calls=[
@@ -213,7 +248,7 @@ def _file_splitting_solver(
                 ]
             )
 
-    # 4. All three recorded contents match: the task is complete.
+    # 4. All N recorded contents match: the task is complete.
     return DeterministicDecision(is_final=True)
 
 
