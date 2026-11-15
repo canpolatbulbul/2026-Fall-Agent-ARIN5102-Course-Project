@@ -26,7 +26,7 @@ from typing import Any, Callable
 
 from course_agent.protocol import AgentRequest
 from course_agent.student_tools.data_helpers import (
-    extract_mcp_text,  # noqa: F401  (consumed by later solvers)
+    extract_mcp_text,
     get_written_files_from_tool_results,
     mcpmark_item_failed,
     parse_read_files_from_tool_results,
@@ -163,6 +163,49 @@ def _has_read_basename(request: AgentRequest, basename: str) -> bool:
     return any(os.path.basename(path) == basename for path in reads)
 
 
+def _non_failed_results(tool_results: list[Any]) -> list[Any]:
+    """Keep only tool_result items that did not fail under the canonical predicate.
+
+    ``parse_read_files_from_tool_results`` / ``get_written_files_from_tool_results``
+    filter on ``ok`` alone, so an ``ok:True`` result whose text begins with
+    ``Error`` (postgres-style failures) would be accepted as real file content or
+    a real successful write. Filtering locally with ``mcpmark_item_failed`` (the
+    same predicate the failure guard uses) excludes those items, so the solver
+    treats a failed read/write as "not done yet", re-emits the identical call, and
+    lets the guard veto it -> LLM hand-back. The shared helper is deliberately
+    left untouched (other code depends on its ``ok``-only behavior).
+    """
+    return [
+        item
+        for item in tool_results
+        if isinstance(item, dict) and not mcpmark_item_failed(item)[0]
+    ]
+
+
+def _has_empty_nonfailed_read(tool_results: list[Any], basename: str) -> bool:
+    """Return True iff a non-failed read of ``basename`` executed but returned no text.
+
+    A successful read with empty text is skipped by
+    ``parse_read_files_from_tool_results`` (empty text), so the solver would
+    re-emit the identical read every turn; the generic failure guard does *not*
+    veto it (the read did not fail), spinning to the turn limit. Detect it here so
+    the solver can hand back to the LLM instead.
+    """
+    for item in tool_results:
+        if not isinstance(item, dict):
+            continue
+        if item.get("tool_name") not in ("read_text_file", "read_file"):
+            continue
+        targs = item.get("tool_arguments") if isinstance(item.get("tool_arguments"), dict) else {}
+        if os.path.basename(str(targs.get("path") or "")) != basename:
+            continue
+        if mcpmark_item_failed(item)[0]:
+            continue
+        if not extract_mcp_text(item):
+            return True
+    return False
+
+
 def _directory_created(tool_results: list[Any], path: str) -> bool:
     """Return True iff a non-failed ``create_directory`` for ``path`` succeeded."""
     target = os.path.normpath(path)
@@ -212,13 +255,21 @@ def _file_splitting_solver(
         tool_results = []
 
     large_path = os.path.join(test_dir, "large_file.txt")
+    # Only non-failed results count as real content/writes (see _non_failed_results):
+    # an ok:True + "Error..." read/write must be treated as "not done yet".
+    valid_results = _non_failed_results(tool_results)
     reads_by_basename = {
         os.path.basename(path): content
-        for path, content in parse_read_files_from_tool_results(tool_results).items()
+        for path, content in parse_read_files_from_tool_results(valid_results).items()
     }
 
     # 1. Read the source file if we have not successfully read it yet.
     if "large_file.txt" not in reads_by_basename:
+        # A successful-but-empty read can never satisfy the split; re-emitting it
+        # would spin to the turn limit (the guard does not veto a non-failing read).
+        if _has_empty_nonfailed_read(tool_results, "large_file.txt"):
+            state["det_disabled"] = True
+            return None
         return DeterministicDecision(
             calls=[SanitizedToolCall(name="read_text_file", arguments={"path": large_path})]
         )
@@ -235,7 +286,7 @@ def _file_splitting_solver(
     # 3. Overwrite-on-mismatch: (re-)write the FIRST part whose recorded content
     # differs from the computed part. Re-writing with different args is safe
     # (write_file overwrites atomically) and is not vetoed by the failure guard.
-    written = get_written_files_from_tool_results(tool_results)
+    written = get_written_files_from_tool_results(valid_results)
     for index in range(1, count + 1):
         target = os.path.join(split_dir, f"split_{index:02d}.txt")
         if written.get(target) != parts[index - 1]:

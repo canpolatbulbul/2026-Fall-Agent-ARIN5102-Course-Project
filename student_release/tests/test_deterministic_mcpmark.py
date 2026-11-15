@@ -407,3 +407,124 @@ def test_guard_vetoes_solver_when_emitted_read_already_failed():
     state: dict = {}
     assert plan_deterministic_mcpmark(req, state) is None
     assert state["det_disabled"] is True
+
+
+# ---------------------------------------------------------------------------
+# Phase B review fixes: ok:True + "Error"-prefixed results (postgres style) and
+# successful-but-empty reads must not be mistaken for real content/writes and
+# must not spin the solver to the turn limit. In every case the solver hands
+# back to the LLM (returns None and latches state["det_disabled"]).
+# ---------------------------------------------------------------------------
+
+# A read that reports ok:true but whose extracted text begins with "Error"
+# (the canonical postgres-style failure the shared predicate catches).
+_ERROR_READ_RESULT = {
+    "tool_name": "read_text_file",
+    "ok": True,
+    "result": {"isError": False, "content": [{"text": "Error: file not found"}]},
+    "tool_arguments": {"path": LARGE_PATH},
+}
+
+
+def test_error_prefixed_read_is_not_treated_as_content_but_handed_back():
+    req = _req(instruction=SPLIT_INSTRUCTION, tool_results=[_ERROR_READ_RESULT])
+    state: dict = {}
+    assert plan_deterministic_mcpmark(req, state) is None
+    assert state["det_disabled"] is True
+
+
+def test_error_prefixed_write_is_not_treated_as_done_but_handed_back():
+    parts = _split_three("abcdefghij")
+    error_write = {
+        "tool_name": "write_file",
+        "ok": True,
+        "result": {"isError": False, "content": [{"text": "Error: disk full"}]},
+        "tool_arguments": {
+            "path": os.path.join(SPLIT_DIR, "split_01.txt"),
+            "content": parts[0],
+        },
+    }
+    req = _req(
+        instruction=SPLIT_INSTRUCTION,
+        tool_results=[_read_result(), _create_dir_result(), error_write],
+    )
+    state: dict = {}
+    assert plan_deterministic_mcpmark(req, state) is None
+    assert state["det_disabled"] is True
+
+
+def test_successful_but_empty_read_hands_back_instead_of_reemitting():
+    empty_read = {
+        "tool_name": "read_text_file",
+        "ok": True,
+        "result": {"isError": False, "content": [{"text": ""}]},
+        "tool_arguments": {"path": LARGE_PATH},
+    }
+    req = _req(instruction=SPLIT_INSTRUCTION, tool_results=[empty_read])
+    state: dict = {}
+    assert plan_deterministic_mcpmark(req, state) is None
+    assert state["det_disabled"] is True
+
+
+# ---------------------------------------------------------------------------
+# Recognized file_splitting task driven through the REAL hook
+# (StudentAgent.solve_mcpmark -> _react_step -> plan_deterministic_mcpmark).
+# The direct-solver integration tests never exercise this wiring.
+# ---------------------------------------------------------------------------
+
+
+def _hook_request(*, instruction=SPLIT_INSTRUCTION, tool_results=None):
+    return AgentRequest.from_dict(
+        {
+            "request_id": "r",
+            "context_id": "c",
+            "benchmark": "mcpmark",
+            "case_id": "filesystem/easy/file_context/file_splitting",
+            "step": 0,
+            "text": instruction,
+            "observation": {
+                "test_directory": "/root/work",
+                "instruction": instruction,
+                "tool_results": tool_results or [],
+            },
+            "tools": [
+                {"name": "read_text_file"},
+                {"name": "write_file"},
+                {"name": "create_directory"},
+            ],
+            "limits": {
+                "max_tool_calls_per_turn": 4,
+                "max_mutating_tool_calls_per_turn": 1,
+            },
+        }
+    )
+
+
+def test_hook_recognized_split_emits_read_text_file(monkeypatch):
+    monkeypatch.setenv("COURSE_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://example.test/v1")
+    llm = FakeLLM(LLMResult(content="LLM would answer", tool_calls=[]))
+    agent = StudentAgent(llm_client=llm)
+
+    response = agent.solve_mcpmark(_hook_request())
+
+    assert response.kind == "tool_call"
+    assert response.tool_name == "read_text_file"
+    assert response.tool_arguments == {"path": LARGE_PATH}
+    assert llm.calls == []  # recognized path must not consult the LLM
+
+
+def test_hook_recognized_split_returns_final_when_all_writes_recorded(monkeypatch):
+    monkeypatch.setenv("COURSE_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://example.test/v1")
+    parts = _split_three("abcdefghij")
+    results = [_read_result(), _create_dir_result()] + [
+        _write_result(path=os.path.join(SPLIT_DIR, f"split_0{n}.txt"), content=parts[n - 1])
+        for n in range(1, 4)
+    ]
+    llm = FakeLLM(LLMResult(content="LLM would answer", tool_calls=[]))
+    agent = StudentAgent(llm_client=llm)
+
+    response = agent.solve_mcpmark(_hook_request(tool_results=results))
+
+    assert response.kind == "final"
