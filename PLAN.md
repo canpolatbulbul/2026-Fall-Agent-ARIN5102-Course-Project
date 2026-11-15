@@ -443,6 +443,12 @@ helpers (`_directory_tree_paths`, `_read_all_files`) that list/read via `request
 - **Caveat:** all three pass only if hidden MCPMark reuses the pinned non-public data (standing assumption);
   timeline and budget are data-fitting and will not transfer to regenerated data. Upside-only: these three
   currently score 0.0 on the pinned checkout.
+- **Live validation (2026-11-15, official backend, run `20261115T133146Z-f708b2e4`, 4 cases):** all four
+  deterministic solvers scored **1.0** in the real runner — `file_splitting` (Phase A; previously FAILED in
+  the census), `timeline_extraction`, `budget_computation`, `duplicates_searching` — each with
+  `llm_api_call_count = 0`, i.e. the Python compute-and-emit path fired and bypassed the LLM entirely.
+  Confirms production integration (pre-hook ordering, path normalization, sanitize) and that the offline
+  replay gates transfer. Cost ≈ 0 LLM calls; the remaining paid credit is preserved.
 
 ### Provisioned-but-unverified facts (from this session)
 - MCPMark pinned at `v1.2.0-26-gcd45b7f` (2026-06-12); course scope = filesystem+postgres = 71 tasks.
