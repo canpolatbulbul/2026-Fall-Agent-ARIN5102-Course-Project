@@ -568,6 +568,24 @@ Two official updates were announced by the Teaching Team after the initial relea
   could — an LLM-behaviour change with real regression risk. The transfer case (24) is the only
   cleanly code-fixable one.
 
+## Tau2 Customer-Initiated Upgrade Rule — Validation (2026-11-15, run `20261115T160643Z-3639b4c9`)
+
+- Change (commit `93eb5aa`): replaced the consent gate with a **customer-initiated-only** rule — the
+  agent must NOT solicit the paid `basic_economy` upgrade; it acts only when the customer asks for a
+  cabin change, honours an explicit refusal, and otherwise declines / cancels when eligible.
+- Focused 7-case run (R1 isolated): **5/7**. Canaries 32/30/13 held; **31 FIXED** (no mutation matches
+  its no-action golden); 35 stayed fixed. **19 unfixed** — the user simulator *volunteered* "if an
+  upgrade is necessary, please…" after the agent framed the change as needing one, so the agent still
+  upgraded (golden = cancel). **22 regressed again** (clean attempt-1 failure this time: skipped
+  `update_reservation_baggages`; in the untouched baseline it did all three).
+- Net vs pre-change on this set: **+2 fixed (31, 35), -1 (22)**. Expected tau2 ~0.60 vs 0.50 baseline.
+- **Decision (2026-11-16): KEEP both tau2 commits** (`0de3458`, `93eb5aa`). Rationale: positive
+  measured EV and mechanism-backed fixes (the reference agent does not solicit upgrades; no airline
+  task needs an agent-initiated upgrade). Accepted risk: the added prompt text may cost multi-action
+  completeness (case 22); 19 is an unfixable reference-path trap (agreeable user simulator).
+- Projection: with held-out-like rates (mcpmark ~0.54, tau2 ~0.60, dp ~0.80) and 60-100 above-baseline
+  scaling, overall ~78. A perfect score is not reachable given tau2's reference-path traps.
+
 ## Agent Handoff Notes
 
 1. Read `AGENTS.md` first — it covers project structure, all commands, and gotchas.
