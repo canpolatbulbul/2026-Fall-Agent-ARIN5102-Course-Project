@@ -417,6 +417,33 @@ the final, instead of relying on the LLM to reconstruct content.
   code changed in Task 4 (regression + docs only). `time_classification` and the Phase B solvers
   (timeline_extraction, duplicates_searching, budget_computation) are explicitly deferred.
 
+### Deterministic compute-and-emit Phase B (2026-11-15) — DELIVERED + offline-validated
+Extended the Phase A deterministic path to the three non-public MCPMark tasks the census showed failing,
+each merged only after its offline replay passed the task's REAL `verify.py` (spec:
+`docs/superpowers/specs/2026-11-15-mcpmark-deterministic-phase-b-design.md`; plan:
+`docs/superpowers/plans/2026-11-15-mcpmark-deterministic-phase-b.md`). No hook/`student_agent.py` change —
+three new solvers appended to `_SOLVERS` in `student_tools/deterministic_mcpmark.py`, sharing two module
+helpers (`_directory_tree_paths`, `_read_all_files`) that list/read via `request.tools` only.
+- `duplicates_searching` — content-hash grouping; reads all files, `create_directory duplicates`, one
+  `move_file` per duplicate (overwrite-on-mismatch). Replay: real verifier exits 0, exact 14-file duplicate
+  set + 7 unique remaining.
+- `timeline_extraction` — fixed 43-entry parser (per-line precedence: earliest full `2024-MM-DD`; `2024-MM-XX`
+  -> 01; month name only with an in-line `2024` token or a `2024` path segment; bare year skipped);
+  writes `timeline.txt`. Replay: real verifier exits 0, produced set byte-equal to the verifier's 43 entries.
+- `budget_computation` — explicit 5-path allowlist (deliberate overfitting, authorized Anti-goal; cheapest
+  store column for `price_comparisons.csv`); writes `total_budget.txt` (15 entries + total 95624.46).
+  Replay: real verifier exits 0.
+- New offline replay harness `tests/mcpmark_fs_sim.py` (faithful filesystem-tool simulator + cross-turn
+  `drive` + real-verifier `run_verify`); new tests `tests/test_deterministic_duplicates.py`,
+  `test_deterministic_timeline.py`, `test_deterministic_budget.py`; empty `tests/conftest.py`.
+- Process: subagent-driven (one implementer + one oracle reviewer per task). Plan adversarially reviewed
+  before execution (1 Critical + 6 Important folded in); each task review returned 0 Critical / 0 Important.
+- Validation: full offline suite `230 passed` (`pytest -q -rs --ignore=tests/test_public_runner_backends.py`);
+  `smoke_local.py` passed. No paid runs used.
+- **Caveat:** all three pass only if hidden MCPMark reuses the pinned non-public data (standing assumption);
+  timeline and budget are data-fitting and will not transfer to regenerated data. Upside-only: these three
+  currently score 0.0 on the pinned checkout.
+
 ### Provisioned-but-unverified facts (from this session)
 - MCPMark pinned at `v1.2.0-26-gcd45b7f` (2026-06-12); course scope = filesystem+postgres = 71 tasks.
 - Hidden MCPMark ⊆ these 71 minus the 16 public ⇒ ≤55 visible non-public tasks with fixed data.
