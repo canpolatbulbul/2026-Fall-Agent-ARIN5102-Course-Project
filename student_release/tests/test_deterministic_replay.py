@@ -166,7 +166,7 @@ def _run_turns(n: int, *, corrupt_first_write: bool = False):
     """
     instruction = {3: _EASY_INSTRUCTION, 10: _TEN_INSTRUCTION}[n]
     results: list[dict] = []
-    emitted: list[str] = []
+    emitted: list[SanitizedToolCall] = []
     final_step: int | None = None
     corrupt_used = False
 
@@ -179,7 +179,7 @@ def _run_turns(n: int, *, corrupt_first_write: bool = False):
         assert decision.calls
         _assert_batch_obeys_policy(decision.calls)
         for call in decision.calls:
-            emitted.append(call.name)
+            emitted.append(call)
             write_content = None
             if (
                 corrupt_first_write
@@ -203,9 +203,17 @@ def test_integration_emits_exact_sequence_and_obeys_policy(n):
     emitted, final_step = _run_turns(n)
 
     expected = ["read_text_file", "create_directory"] + ["write_file"] * n
-    assert emitted == expected
+    assert [c.name for c in emitted] == expected
     # Final only after read + create + all n writes were recorded.
     assert final_step == len(expected)
+
+    # The happy path must emit the CORRECT bytes, not just the right call names.
+    parts = _split_n(SOURCE_CONTENT, n)
+    writes = [c for c in emitted if c.name == "write_file"]
+    assert len(writes) == n
+    for i, call in enumerate(writes, start=1):
+        assert call.arguments["path"] == os.path.join(SPLIT_DIR, f"split_{i:02d}.txt")
+        assert call.arguments["content"] == parts[i - 1]
 
 
 def test_integration_is_not_final_until_all_parts_correct():
