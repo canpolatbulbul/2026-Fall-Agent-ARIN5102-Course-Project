@@ -491,23 +491,28 @@ Two official updates were announced by the Teaching Team after the initial relea
 - Result: **5/10 (0.50)** — 86 LLM calls / ~0.87M tokens. Above the course baseline (0.4167) but
   far below the public set (10/12) and the earlier 3/3 probe. Non-public tau2 is much harder; the
   public/probe samples were optimistic.
-- Failure taxonomy (all LLM decision errors; no code bug, deterministic path does not cover tau2):
-  - **task 24 & 35 — transfer-loop / incomplete task (2 cases).** The agent repeatedly called
-    `transfer_to_human_agents` (12× in task 35!) instead of completing the bookable intent, never
-    reached `book_reservation`. Task 35's user explicitly rejects transfer. Our prompt (`prompts.py`
-    line 147-148) authorises transfer when "request violates policy/scope" but does **not** cap the
-    number of transfers or force progress on remaining multi-intent goals.
-  - **task 19 & 31 — invalid mutation when none was required (2 cases).** task 19: performed
-    `update_reservation_flights` on a `basic_economy` reservation that cannot be modified (golden =
-    `cancel_reservation`). task 31: modified the reservation when the change exceeded the user's
-    <$100 limit (golden = no actions, agent should decline).
+- Failure taxonomy (all LLM decision errors; no code bug, deterministic path does not cover tau2).
+  Verified on the *scored* attempt of each case (task 35 was auto-resumed; its scored attempt is
+  attempt 2, so the 12-transfer loop seen in attempt 1 is not the scored behaviour):
+  - **task 24 & 35 — refused one sub-intent and abandoned the other (2 cases).** Both users had two
+    intents: a disallowed cancellation/removal (can't be done) plus a legitimate booking (can be
+    done). The agent called `transfer_to_human_agents` for the disallowed part and then ended the
+    conversation, never completing the bookable part (no `book_reservation`). Task 35's user
+    explicitly rejects transfer.
+  - **task 19 & 31 — invalid mutation when none/another was required (2 cases).** task 19: ran
+    `update_reservation_flights` on a `basic_economy` reservation the user wanted cancelled (golden =
+    `cancel_reservation`). task 31: performed the 2-step flight change even though it exceeded the
+    user's <$100 limit (golden = no actions; the agent should decline).
   - **task 29 — wrong args on a correct action (1 case).** Cancelled correctly, but rebooked with the
-    wrong return date (2024-05-20 vs golden 2024-05-19) and `insurance=yes`.
+    wrong return date (2024-05-20 vs golden 2024-05-19).
+- Note: a naive "cap transfers at 1" guard would NOT have fixed the scored failures (each already had
+  exactly 1 transfer in the scored attempt). The actionable change is behavioural: never abandon a
+  handleable sub-intent when refusing another, and refuse to transfer while a bookable intent remains.
 - Strategic implication: hidden tau2 is likely to land near this rate, not the public 12/12. 0.50 is
-  still above baseline, so scoring remains in the >baseline band, but the margin is thin. A cheap,
-  targeted prompt/guard fix for the transfer loop (2 of 5 failures, both 0-cost to reason about) is
-  the highest-value candidate if any further work is done; it would need a validating run to confirm
-  no regression on the currently-passing cases.
+  still above baseline, so scoring remains in the >baseline band, but the margin is thin. The
+  highest-value (and hard to verify) candidate is a behavioural prompt change: complete every
+  handleable sub-intent and never transfer while a bookable intent remains. It would need a
+  validating run to confirm no regression on the currently-passing cases.
 
 ## Non-Public DeepPlanning Measurement (2026-11-15, official backend, run `20261115T142734Z-345dae82`)
 
