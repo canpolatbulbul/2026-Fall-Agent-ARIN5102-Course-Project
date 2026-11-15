@@ -393,6 +393,30 @@ final; no-fire when a success exists; no-fire with 0 attempts; no-fire when turn
 Full offline suite: **175 passed**; `smoke_local.py` passed. Truncation/reasoning cases remain the dominant
 mode but are per-task (Phase B) and not cheaply fixable generally.
 
+### Deterministic compute-and-emit Phase A (2026-11-15) — DELIVERED + offline-validated
+Implemented the generic deterministic path described in
+`docs/superpowers/plans/2026-11-15-mcpmark-deterministic-compute-and-emit.md` (spec:
+`docs/superpowers/specs/2026-11-15-mcpmark-deterministic-compute-and-emit-design.md`). A recognized
+MCPMark task is now solved by Python from raw tool results: the agent emits the exact tool calls and owns
+the final, instead of relying on the LLM to reconstruct content.
+- New `student_tools/deterministic_mcpmark.py`: `plan_deterministic_mcpmark(request, state)` returns a
+  `DeterministicDecision` (calls to emit, or a final) or `None` to yield to the existing LLM path; mcpmark-only,
+  routed through `sanitize_tool_calls`, side-effect-free when it does not recognize a task.
+- `_react_step` hook added immediately after `get_pending_mcpmark_batch_reads` (mcpmark block); a solver that
+  has emitted mutations always owns the final.
+- Framework failure guard applies to EVERY decision (reads included): a call identical (name+arguments) to one
+  that already failed in `tool_results` disables the deterministic path and falls back to the LLM.
+- First solver: `file_splitting`, generalized to N in {3, 10}; exact-content partition (concatenation preserved,
+  lengths differ by ≤1), basename read lookup, overwrite-on-mismatch of existing artifacts, `create_directory`
+  gate. Recognition is instruction-text + required-tools based (never `case_id`), so it transfers to hidden
+  instances.
+- Validation: `tests/test_deterministic_mcpmark.py` (framework/guard + solver) and
+  `tests/test_deterministic_replay.py` (turn-by-turn integration through the hook + replay of the produced
+  artifacts through the task's REAL `verify.py`). Task 4 regression: `pytest -q -rs
+  --ignore=tests/test_public_runner_backends.py` → **214 passed**; `smoke_local.py` → passed. No production
+  code changed in Task 4 (regression + docs only). `time_classification` and the Phase B solvers
+  (timeline_extraction, duplicates_searching, budget_computation) are explicitly deferred.
+
 ### Provisioned-but-unverified facts (from this session)
 - MCPMark pinned at `v1.2.0-26-gcd45b7f` (2026-06-12); course scope = filesystem+postgres = 71 tasks.
 - Hidden MCPMark ⊆ these 71 minus the 16 public ⇒ ≤55 visible non-public tasks with fixed data.
